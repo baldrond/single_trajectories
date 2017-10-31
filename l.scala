@@ -17,7 +17,7 @@ object l {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
-    val rawfile = sc.textFile("D:\\Stavanger_one_week\\forsteTimen.csv")
+    val rawfile = sc.textFile(paths.getPath()+"forsteTimen.csv")
     val rawfileRDD = rawfile.map(line => line.split(";")).mapPartitionsWithIndex { (idx, iter) => if (idx == 0) iter.drop(1) else iter }
     //0. Circle name
     //1. cell ID
