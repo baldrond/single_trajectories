@@ -2,7 +2,6 @@ package single_trajectories
 
 import breeze.linalg.DenseVector
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix, MatrixEntry}
-import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ListBuffer
 
