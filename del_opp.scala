@@ -3,6 +3,10 @@ package single_trajectories
 import java.io.{File, PrintWriter}
 
 import org.apache.spark.{SparkConf, SparkContext}
+/*
+Simple method to divide the dataset to only the first hour, so it will be faster to run.
+ */
+
 
 object del_opp {
   def main(args: Array[String]): Unit = {
