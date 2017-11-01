@@ -34,24 +34,32 @@ object hungarian_algorithm {
   //Step 3 - Assign 1's
   def step3(coordinate_matrix: CoordinateMatrix, matrix_entries: ListBuffer[MatrixEntry], columns_number: ListBuffer[Int]): (DenseVector[Int], DenseVector[Int]) = {
     val columns = DenseVector.zeros[Int](coordinate_matrix.numCols().toInt)
+    val columns_counter = DenseVector.zeros[Int](coordinate_matrix.numCols().toInt)
     val rows = DenseVector.zeros[Int](coordinate_matrix.numRows().toInt)
 
     for(entry <- matrix_entries) {
       if (entry.value == 1) {
-        if (columns(entry.j.toInt) != columns_number(entry.j.toInt)) {
-          columns(entry.j.toInt) += 1
+        if (columns_counter(entry.j.toInt) != columns_number(entry.j.toInt)) {
+          columns_counter(entry.j.toInt) += 1
           rows(entry.i.toInt) = 1
+        } else {
+          columns(entry.j.toInt) = 1
         }
+      }
+    }
+    for(entry <- matrix_entries) {
+      if (entry.value == 1 && columns(entry.j.toInt) == 1 && rows(entry.j.toInt) == 1){
+        rows(entry.j.toInt) = 0
       }
     }
 
     return (rows, columns)
   }
 
-  //Step 3 part 2, find highest value
-  //TODO: Must improve as columns with not 1, who still are marked on columns, are also counted
-  def step3_highest(irow_matrix: IndexedRowMatrix, rows: DenseVector[Int]): (Double, (Int, Int)) = {
+  //Step 3 and 4, find highest value
+  def step3_4(irow_matrix: IndexedRowMatrix, rows: DenseVector[Int]): (Double, (Int, Int)) = {
     var highest = (0.0, (0,0))
+
     for(irow <- irow_matrix.rows.collect()){
       if(rows(irow.index.toInt) == 0){
         val array = irow.vector.toArray

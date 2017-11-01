@@ -41,11 +41,14 @@ object cost_matrix {
     var columns_number = new ListBuffer[Int]
 
     var index = 0
-    for (element1 <- array1) {
+    for ((element1, k) <- array1.zipWithIndex) {
       var s_entry = new ListBuffer[String]
       println("Index: "+index+" ("+element1._2+","+array2.length+")")
       for(i <- 0 until element1._2){
         for((element2, j) <- array2.zipWithIndex) {
+          if(k == 0 && i == 0){
+            columns_number += element2._2
+          }
           val distance = dist_matrix(dist_map(element1._1), dist_map(element2._1))
           if (distance > 0){
             matrix_entries += new MatrixEntry(index, j, distance)
@@ -54,7 +57,6 @@ object cost_matrix {
         index += 1
         s_entry += element1._1
       }
-      columns_number += element1._2
       s += s_entry
     }
 

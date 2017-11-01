@@ -63,7 +63,7 @@ object single_trajectories {
       var rows = step3_retur._1
       var columns = step3_retur._2
       step3_retur = null
-      val highest = hungarian_algorithm.step3_highest(coordinate_matrix.toIndexedRowMatrix(), rows)
+      val highest = hungarian_algorithm.step3_4(coordinate_matrix.toIndexedRowMatrix(), rows)
 
       val before = coordinate_matrix.entries.filter(entry => entry.i.toInt == highest._2._1 && entry.j.toInt == highest._2._2).first()
       //step 4
@@ -75,6 +75,7 @@ object single_trajectories {
         }
       }
       sum_list += sum
+      println("Sum "+(i+1)+": "+sum)
       rows = null
       columns = null
       coordinate_matrix = new CoordinateMatrix(sc.parallelize(matrix_entries))
