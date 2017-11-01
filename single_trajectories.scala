@@ -6,10 +6,10 @@ import org.apache.spark.{SparkConf, SparkContext}
 
 object single_trajectories {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")//.set("spark.driver.memory", "8g").set("spark.executor.memory", "8g")
     val sc = new SparkContext(conf)
 
-    val rawfile = sc.textFile(paths.getPath()+"forsteTimen.csv")
+    val rawfile = sc.textFile(paths.getPath()+"forsteTimen.csv")//.sample(false, 0.3)
     val rawfileRDD = rawfile.map(line => line.split(";")).mapPartitionsWithIndex { (idx, iter) => if (idx == 0) iter.drop(1) else iter }
     //0. Circle name
     //1. cell ID
@@ -41,12 +41,12 @@ object single_trajectories {
     }
 
     //TODO: Step 2
-    val step3_retur = hungarian_algorithm.step3(coordinate_matrix, matrix_entries, columns_number)
-    var rows = step3_retur._1
-    var columns = step3_retur._2
+    val step3_retur_init = hungarian_algorithm.step3(coordinate_matrix, matrix_entries, columns_number)
+    var rows = step3_retur_init._1
+    var columns = step3_retur_init._2
 
     var sum1 = 0
-    for(row <- rows){
+    for (row <- rows) {
       sum1 += row
     }
 
@@ -55,35 +55,24 @@ object single_trajectories {
     println("Calculating new values")
 
     val før = coordinate_matrix.entries.filter(entry => entry.i.toInt == highest._2._1 && entry.j.toInt == highest._2._2).first()
-    coordinate_matrix = hungarian_algorithm.step4(coordinate_matrix, rows, highest._1)
+    matrix_entries = hungarian_algorithm.step4(coordinate_matrix, rows, highest._1)
+    coordinate_matrix = new CoordinateMatrix(sc.parallelize(matrix_entries))
     val etter = coordinate_matrix.entries.filter(entry => entry.i.toInt == highest._2._1 && entry.j.toInt == highest._2._2).first()
     print("FØR: ")
     println(før)
     print("ETTER: ")
     println(etter)
 
-    matrix_entries.clear()
-
-    val new_matrix_entries = coordinate_matrix.entries.collect().toList
-    columns = DenseVector.zeros[Int](coordinate_matrix.numCols().toInt)
-    rows = DenseVector.zeros[Int](coordinate_matrix.numRows().toInt)
-
-    println("Calculating cols and rows")
-    for(entry <- new_matrix_entries) {
-      if (entry.value == 1) {
-        if (columns(entry.j.toInt) != columns_number(entry.j.toInt)) {
-          columns(entry.j.toInt)    += 1
-          rows(entry.i.toInt) = 1
-        }
-      }
-    }
+    val step3_retur = hungarian_algorithm.step3(coordinate_matrix, matrix_entries, columns_number)
+    rows = step3_retur._1
+    columns = step3_retur._2
 
     var sum2 = 0
-    for(row <- rows){
+    for (row <- rows) {
       sum2 += row
     }
 
-    println("Sum1: "+sum1)
-    println("Sum2: "+sum2)
+    println(sum1)
+    println(sum2)
   }
 }
