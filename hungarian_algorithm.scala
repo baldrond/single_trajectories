@@ -2,6 +2,7 @@ package single_trajectories
 
 import breeze.linalg.DenseVector
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix, MatrixEntry}
+import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ListBuffer
 
@@ -66,10 +67,29 @@ object hungarian_algorithm {
 
   //Step 4, edit all elements not marked
   //TODO: Must also edit double marked elements
-  def step4(coordinate_matrix: CoordinateMatrix, rows: DenseVector[Int], highest: Double): CoordinateMatrix = {
-    val new_coordinate_matrix = new CoordinateMatrix(coordinate_matrix.entries.map(entry =>
+  def step4(coordinate_matrix: CoordinateMatrix, rows: DenseVector[Int], highest: Double): ListBuffer[MatrixEntry] = {
+    val entries = coordinate_matrix.entries.collect()
+    val new_entries = new ListBuffer[MatrixEntry]
+    var i = 0
+    var m = 0
+    for(entry <- entries){
+      i += 1
+      if(i == 100000){
+        println(i+m)
+        m += i
+        i = 0
+      }
+      var new_value = 0.0
+      if(rows(entry.i.toInt) == 0){
+        new_value = Math.min(1.0, entry.value + 1-highest)
+      } else {
+        new_value = entry.value
+      }
+      new_entries += new MatrixEntry(entry.i, entry.j, new_value)
+    }
+    /*val new_entries = coordinate_matrix.entries.map(entry =>
       MatrixEntry(entry.i, entry.j, if(rows(entry.i.toInt) == 0) Math.min(1.0,entry.value + 1-highest) else entry.value)
-    ))
-    return new_coordinate_matrix
+    )*/
+    return new_entries
   }
 }
