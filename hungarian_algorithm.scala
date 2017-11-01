@@ -70,15 +70,7 @@ object hungarian_algorithm {
   def step4(coordinate_matrix: CoordinateMatrix, rows: DenseVector[Int], highest: Double): ListBuffer[MatrixEntry] = {
     val entries = coordinate_matrix.entries.collect()
     val new_entries = new ListBuffer[MatrixEntry]
-    var i = 0
-    var m = 0
     for(entry <- entries){
-      i += 1
-      if(i == 100000){
-        println(i+m)
-        m += i
-        i = 0
-      }
       var new_value = 0.0
       if(rows(entry.i.toInt) == 0){
         new_value = Math.min(1.0, entry.value + 1-highest)
