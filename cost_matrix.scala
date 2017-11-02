@@ -12,6 +12,7 @@ object cost_matrix {
   def makeDistMatrix(array: Array[(String, (Double, Double))]): (DenseMatrix[Double], HashMap[String, Int]) = {
     var dist_matrix = DenseMatrix.zeros[Double](array.length,array.length)
     var dist_map: HashMap[String, Int] = HashMap()
+    val threshold = 700.0
 
     for((acell, i) <- array.zipWithIndex){
       val entry = (acell._1, i)
@@ -21,7 +22,6 @@ object cost_matrix {
         val east = Math.abs(acell._2._1 - another._2._1)
         val north = Math.abs(acell._2._2 - another._2._2)
         val distance = Math.sqrt(Math.pow(east, 2) + Math.pow(north, 2))
-        val threshold = 500.0
         if (distance > threshold) {
           dist_matrix(i, j) = 0.0
         } else {
@@ -31,6 +31,19 @@ object cost_matrix {
     }
 
     return (dist_matrix, dist_map)
+  }
+  //Approximately count matrix entries
+  def approxMatrixEntries(array1: Array[(String, Int)], array2length: Int, dist_matrix: DenseMatrix[Double]): (Long, Long) = {
+    var average_array_1 = 0.0
+    for (element <- array1) {
+      average_array_1 += element._2
+    }
+    var dist_matrix_entries = 0.0
+    dist_matrix.foreachValue(value => if(value != 0.0) dist_matrix_entries += 1)
+    val dist_matrix_density = dist_matrix_entries / (dist_matrix.rows * dist_matrix.cols)
+    val total_number = (average_array_1/array1.length.toDouble) * array1.length.toDouble * array2length.toDouble
+    val matrix_entries = total_number * dist_matrix_density
+    return (Math.round(total_number), Math.round(matrix_entries))
   }
 
   //Input: Arrays for first and second timestep (position, count), distance matrix and distance map
@@ -43,20 +56,23 @@ object cost_matrix {
     var index = 0
     for ((element1, k) <- array1.zipWithIndex) {
       var s_entry = new ListBuffer[String]
-      println("Index: "+index+" ("+element1._2+","+array2.length+")")
       for(i <- 0 until element1._2){
-        for((element2, j) <- array2.zipWithIndex) {
-          if(k == 0 && i == 0){
-            columns_number += element2._2
-          }
-          val distance = dist_matrix(dist_map(element1._1), dist_map(element2._1))
-          if (distance > 0){
-            matrix_entries += new MatrixEntry(index, j, distance)
-          }
-        }
-        index += 1
         s_entry += element1._1
       }
+      for((element2, j) <- array2.zipWithIndex) {
+        if(k == 0){
+          columns_number += element2._2
+        }
+        val distance = dist_matrix(dist_map(element1._1), dist_map(element2._1))
+        if (distance > 0){
+          for(i <- 0 until element1._2) {
+            index += 1
+            matrix_entries += new MatrixEntry(index, j, distance)
+          }
+          index -= element1._2
+        }
+      }
+      index += element1._2
       s += s_entry
     }
 

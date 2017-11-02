@@ -31,6 +31,9 @@ object single_trajectories {
     var dist_map = dist_matrix_retur._2
     dist_matrix_retur = null
 
+    val cost_matrix_size = cost_matrix.approxMatrixEntries(p, p2.length, dist_matrix)
+    println("Creating cost matrix with approximatly density of "+cost_matrix_size._2+" / "+cost_matrix_size._1+" elements.")
+
     //Create cost matrix
     var coordinate_matrix_retur = cost_matrix.makeCoordinateMatrix(p, p2, dist_matrix, dist_map)
     var single_trajectories = coordinate_matrix_retur._3
@@ -88,7 +91,7 @@ object single_trajectories {
       println(after)
     }
 
-    for((i, sum) <- sum_list.zipWithIndex){
+    for((sum, i) <- sum_list.zipWithIndex){
       println("Sum "+i+": "+sum)
     }
   }
