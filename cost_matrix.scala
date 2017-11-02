@@ -12,7 +12,7 @@ object cost_matrix {
   def makeDistMatrix(array: Array[(String, (Double, Double))]): (DenseMatrix[Double], HashMap[String, Int]) = {
     var dist_matrix = DenseMatrix.zeros[Double](array.length,array.length)
     var dist_map: HashMap[String, Int] = HashMap()
-    val threshold = 700.0
+    val threshold = 500.0
 
     for((acell, i) <- array.zipWithIndex){
       val entry = (acell._1, i)

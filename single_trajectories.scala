@@ -45,6 +45,7 @@ object single_trajectories {
     dist_matrix = null
     dist_map = null
 
+    println("Starting the hungarian algorithm")
     //Running through the hungarian algorithm
     //step 1
     var step1_retur = hungarian_algorithm.step1(coordinate_matrix.toIndexedRowMatrix())
@@ -61,15 +62,18 @@ object single_trajectories {
     //Repeat steps 3–4 until an assignment is possible (In this test: only a few iterations)
     for(i <- 0 until number_of_iterations) {
       println("Iteration "+(i+1))
+      println("Step 3")
       //step 3
       var step3_retur = hungarian_algorithm.step3(coordinate_matrix, matrix_entries, columns_number)
       var rows = step3_retur._1
       var columns = step3_retur._2
       step3_retur = null
+      println("Step 3-4")
       val highest = hungarian_algorithm.step3_4(coordinate_matrix.toIndexedRowMatrix(), rows)
 
       val before = coordinate_matrix.entries.filter(entry => entry.i.toInt == highest._2._1 && entry.j.toInt == highest._2._2).first()
       //step 4
+      println("Step 4")
       matrix_entries = hungarian_algorithm.step4(coordinate_matrix, rows, highest._1)
       var sum = 0
       for(r <- rows){

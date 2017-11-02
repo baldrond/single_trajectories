@@ -38,7 +38,7 @@ object hungarian_algorithm {
     val rows = DenseVector.zeros[Int](coordinate_matrix.numRows().toInt)
 
     for(entry <- matrix_entries) {
-      if (entry.value == 1) {
+      if (entry.value == 1.0) {
         if (columns_counter(entry.j.toInt) != columns_number(entry.j.toInt)) {
           columns_counter(entry.j.toInt) += 1
           rows(entry.i.toInt) = 1
