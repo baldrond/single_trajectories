@@ -9,6 +9,7 @@ import scala.collection.mutable.ListBuffer
 
 /*
 Method for creating a network of the datapoints (Calculating neighbors)
+Important that the divide_dataset object have ran before.
 TODO: Needs to be more accurate
  */
 
@@ -18,7 +19,7 @@ object network {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
-    val rawfile = sc.textFile("D:\\Stavanger_one_week\\forsteTimen.csv")
+    val rawfile = sc.textFile(paths.getPath()+"forsteTimen.csv")
     val rawfileRDD = rawfile.map(line => line.split(";")).mapPartitionsWithIndex { (idx, iter) => if (idx == 0) iter.drop(1) else iter }
     //0. Circle name
     //1. cell ID
@@ -140,7 +141,7 @@ object network {
 
 
     //Make csv on the form from_east;from_north;to_east;to_north;distance;angle
-    var pw = new PrintWriter(new File("D:\\Stavanger_one_week\\network.csv"))
+    var pw = new PrintWriter(new File(paths.getPath()+"network.csv"))
     for(list <- full_list) {
       for (line <- list) {
         pw.write(line._4._1._1+";"+line._4._1._2+";"+line._4._2._1+";"+line._4._2+";"+line._2+";"+line._3 + "\n")
@@ -157,7 +158,7 @@ object network {
     }
     geojson = geojson.substring(0, geojson.length-1) + "]\n}"
 
-    pw = new PrintWriter(new File("D:\\Stavanger_one_week\\network.geojson"))
+    pw = new PrintWriter(new File(paths.getPath()+"network.geojson"))
     pw.write(geojson)
     pw.close()
   }

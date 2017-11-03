@@ -1,10 +1,24 @@
 package single_trajectories
 
-import breeze.linalg.DenseVector
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.{SparkConf, SparkContext}
-
 import scala.collection.mutable.ListBuffer
+
+/*
+Our runnable class for calculating the single trajectories of the aggregated data.
+Important that the divide_dataset, and network objects have ran before, so that the csv-files have been created.
+Must also have a object paths like this:
+
+package single_trajectories
+
+object paths {
+  def getPath(): String ={
+    <<path to Stavanger_one_week.csv>>
+  }
+}
+
+ */
+
 
 object single_trajectories {
   def main(args: Array[String]): Unit = {
@@ -24,6 +38,11 @@ object single_trajectories {
     val cell_with_coords = rawfileRDD.map(row => (row(1), (row(2).toDouble, row(3).toDouble))).distinct().collect()
     val p = rawfileRDD.filter(row => row(5).equals("2017-09-25 00:00:00")).map(row => (row(1), if (row(4).contains("Below")) 10 else row(4).toInt)).collect()
     val p2 = rawfileRDD.filter(row => row(5).equals("2017-09-25 00:01:00")).map(row => (row(1), if (row(4).contains("Below")) 10 else row(4).toInt)).collect()
+
+    //Load in Network
+    val rawfile_network = sc.textFile(paths.getPath()+"network.csv")
+    val rawfileRDD_network = rawfile_network.map(line => line.split(";")).mapPartitionsWithIndex { (idx, iter) => if (idx == 0) iter.drop(1) else iter }
+    val network = rawfileRDD_network.map(row => (((row(0).toDouble, row(1).toDouble), (row(2).toDouble, row(3).toDouble)), (row(4).toDouble, row(5).toDouble)))
 
     //Create distance matrix
     var dist_matrix_retur = cost_matrix.makeDistMatrix(cell_with_coords)
