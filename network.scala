@@ -3,7 +3,8 @@ package single_trajectories
 import java.io.{File, PrintWriter}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import uk.me.jstott.jcoord.UTMRef
+import uk.me.jstott.jcoord.{LatLng, UTMRef}
+
 import scala.collection.mutable.ListBuffer
 
 /*
@@ -30,7 +31,7 @@ object network {
 
     val offset = 20
 
-    val full_list = new ListBuffer[ListBuffer[(Edge, Double, Double)]]
+    val full_list = new ListBuffer[ListBuffer[(Edge, Double, Double, ((Double, Double),(Double, Double)))]]
 
     val water_edges = new ListBuffer[Edge]
     water_edges += new Edge(new Point(58.8863775541457, 5.752716064453125), new Point(59.002561207839875, 5.804901123046875))
@@ -45,7 +46,7 @@ object network {
       val point = new Point(lnglat.getLat, lnglat.getLng)
       println("single_trajectories.Point: "+i)
 
-      val edge_list = new ListBuffer[(Edge, Double, Double)]
+      val edge_list = new ListBuffer[(Edge, Double, Double, ((Double, Double),(Double, Double)))]
       for ((anotherPoint, j) <- onlyPoints.zipWithIndex){
         if(i != j) {
           val lnglat2 = new UTMRef(anotherPoint._1._1, anotherPoint._1._2, 'N', 33).toLatLng
@@ -54,7 +55,7 @@ object network {
           val edge = new Edge(point, point2)
           val distance = edge.distBetween()
           val angle = edge.angleBetween()
-          val entry = (edge, distance, angle)
+          val entry = (edge, distance, angle, (aPoint._1, anotherPoint._1))
 
           var enter = true
           var water_collision = false
@@ -71,7 +72,6 @@ object network {
                 if (distance < e._2) {
                   edge_list -= e
                   edge_list += entry
-                  //println("Removes: "+e._1.toPrint()+" , and adds: "+edge.toPrint())
                   enter = false
                 } else {
                   enter = false
@@ -99,7 +99,7 @@ object network {
       }
       val steg = (hoyest - lavest) / distinct_edge_list.size
 
-      val final_list = new ListBuffer[(Edge, Double, Double)]
+      val final_list = new ListBuffer[(Edge, Double, Double, ((Double, Double),(Double, Double)))]
       for(e <- distinct_edge_list){
         if (e._2 <= lavest + steg * 5) {
           final_list += e
@@ -139,6 +139,15 @@ object network {
     }
 
 
+    //Make csv on the form from_east;from_north;to_east;to_north;distance;angle
+    var pw = new PrintWriter(new File("D:\\Stavanger_one_week\\network.csv"))
+    for(list <- full_list) {
+      for (line <- list) {
+        pw.write(line._4._1._1+";"+line._4._1._2+";"+line._4._2._1+";"+line._4._2+";"+line._2+";"+line._3 + "\n")
+      }
+    }
+    pw.close
+
     //Make GeoJSON
     var geojson = "{\n  \"type\": \"FeatureCollection\",\n  \"features\": ["
     for(list <- full_list){
@@ -148,7 +157,7 @@ object network {
     }
     geojson = geojson.substring(0, geojson.length-1) + "]\n}"
 
-    val pw = new PrintWriter(new File("D:\\Stavanger_one_week\\network.geojson"))
+    pw = new PrintWriter(new File("D:\\Stavanger_one_week\\network.geojson"))
     pw.write(geojson)
     pw.close()
   }
