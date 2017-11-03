@@ -8,6 +8,7 @@ import scala.collection.mutable.ListBuffer
 
 /*
 Method for creating a network of the datapoints (Calculating neighbors)
+TODO: Needs to be more accurate
  */
 
 
