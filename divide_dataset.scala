@@ -8,7 +8,7 @@ Simple method to divide the dataset to only the first hour, so it will be faster
  */
 
 
-object del_opp {
+object divide_dataset {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     val sc = new SparkContext(conf)
