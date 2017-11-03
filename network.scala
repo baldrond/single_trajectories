@@ -144,7 +144,7 @@ object network {
     var pw = new PrintWriter(new File(paths.getPath()+"network.csv"))
     for(list <- full_list) {
       for (line <- list) {
-        pw.write(line._4._1._1+";"+line._4._1._2+";"+line._4._2._1+";"+line._4._2+";"+line._2+";"+line._3 + "\n")
+        pw.write(line._4._1._1+";"+line._4._1._2+";"+line._4._2._1+";"+line._4._2._2+";"+line._2+";"+line._3 + "\n")
       }
     }
     pw.close

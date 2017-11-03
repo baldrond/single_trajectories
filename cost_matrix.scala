@@ -3,22 +3,30 @@ package single_trajectories
 import breeze.linalg.DenseMatrix
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, ListBuffer, MultiMap, Set}
 
 object cost_matrix {
 
   //Input: a list with all position_id, (northling, eastling)
   //Output: a Matrix with all distances between the positions, and a HashMap which maps id to position in matrix
-  def makeDistMatrix(array: Array[(String, (Double, Double))]): (DenseMatrix[Double], HashMap[String, Int]) = {
+  def makeDistMatrix(array: Array[(String, (Double, Double))], network: Array[(((Double, Double),(Double,Double)), (Double, Double))], max_distance: Double): (DenseMatrix[Double], HashMap[String, Int]) = {
     var dist_matrix = DenseMatrix.zeros[Double](array.length,array.length)
     var dist_map: HashMap[String, Int] = HashMap()
+    val coord_map = new HashMap[(Double, Double), Set[String]] with MultiMap[(Double, Double), String]
     val threshold = 500.0
 
     for((acell, i) <- array.zipWithIndex){
       val entry = (acell._1, i)
       dist_map += entry
-
+      val coord_list = coord_map.addBinding(acell._2, acell._1)
+      for((another, j) <- array.zipWithIndex){
+        if(acell._2.equals(another._2)){
+          dist_matrix(i,j) = 1.0
+        }
+      }
+      /*
       for ((another, j) <- array.zipWithIndex){
+        println(i+", "+j)
         val east = Math.abs(acell._2._1 - another._2._1)
         val north = Math.abs(acell._2._2 - another._2._2)
         val distance = Math.sqrt(Math.pow(east, 2) + Math.pow(north, 2))
@@ -27,8 +35,20 @@ object cost_matrix {
         } else {
           dist_matrix(i, j) = 1.0 - (distance/threshold)
         }
+      }*/
+    }
+    for(connection <- network){
+      val point1 = coord_map.get(connection._1._1)
+      val point2 = coord_map.get(connection._1._2)
+      for(cell1 <- point1.get){
+        val i = dist_map(cell1)
+        for(cell2 <- point2.get){
+          val j = dist_map(cell2)
+          dist_matrix(i, j) = 1.0 - (connection._2._1/max_distance)
+        }
       }
     }
+
 
     return (dist_matrix, dist_map)
   }
