@@ -1,7 +1,7 @@
 package single_trajectories
 
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.{SparkConf, SparkContext}
+
 import scala.collection.mutable.ListBuffer
 
 /*
@@ -58,78 +58,80 @@ object single_trajectories {
     network = null
     network_RDD = null
 
-    val cost_matrix_size = cost_matrix.approxMatrixEntries(p, p2.length, dist_matrix)
-    println("Creating cost matrix with approximatly density of "+cost_matrix_size._2+" / "+cost_matrix_size._1+" elements.")
+    //val cost_matrix_size = cost_matrix.approxMatrixEntries(p, p2.length, dist_matrix)
+    //println("Creating cost matrix with approximatly density of "+cost_matrix_size._2+" / "+cost_matrix_size._1+" elements.")
 
     //Create cost matrix
     var coordinate_matrix_retur = cost_matrix.makeCoordinateMatrix(p, p2, dist_matrix, dist_map)
-    var single_trajectories = coordinate_matrix_retur._3
+    var single_trajectories = coordinate_matrix_retur._4
     var matrix_entries = coordinate_matrix_retur._1
     val columns_number = coordinate_matrix_retur._2
+    val columns_name = coordinate_matrix_retur._3
+    val row_length = coordinate_matrix_retur._5
 
     cell_with_coords = null
     p = null
     p2 = null
-
-    val num_partitions = 40
-    var coordinate_matrix: CoordinateMatrix = new CoordinateMatrix(sc.parallelize(matrix_entries, num_partitions))
-
     coordinate_matrix_retur = null
     dist_matrix = null
     dist_map = null
 
     println("Starting the hungarian algorithm")
     //Running through the hungarian algorithm
-    //step 1
-    var step1_retur = hungarian_algorithm.step1(coordinate_matrix.toIndexedRowMatrix())
-    if(step1_retur._1){
-      coordinate_matrix = step1_retur._2.toCoordinateMatrix()
-    }
+    hungarian_algorithm.step1(matrix_entries, row_length)
+    hungarian_algorithm.step2(matrix_entries, columns_number.length)
 
-    step1_retur = null
-    //step 2: Not implemented yet as all columns will in the test example will contain at least one 1.0 value
-    //TODO: Step 2
-
-    val number_of_iterations = 10
-    var sum_list = new ListBuffer[Int]
     //Repeat steps 3–4 until an assignment is possible (In this test: only a few iterations)
-    for(i <- 0 until number_of_iterations) {
-      println("Iteration "+(i+1))
-      println("Step 3")
-      //step 3
-      var step3_retur = hungarian_algorithm.step3(coordinate_matrix, matrix_entries, columns_number)
-      var rows = step3_retur._1
-      var columns = step3_retur._2
-      step3_retur = null
-      println("Step 3-4")
-      val highest = hungarian_algorithm.step3_4(coordinate_matrix.toIndexedRowMatrix(), rows)
+    var assignments_left = 100000
+    var i = 0
+    var columns_marked = 100000
+    while(assignments_left != 0) {
+      println("\nIteration "+(i+1))
+      //Step 3
+      val (rows, cols) = hungarian_algorithm.step3(matrix_entries, columns_number, row_length, columns_number.length)
+      //Step 4
+      matrix_entries = hungarian_algorithm.step4(matrix_entries, rows, cols)
 
-      val before = coordinate_matrix.entries.filter(entry => entry.i.toInt == highest._2._1 && entry.j.toInt == highest._2._2).first()
-      //step 4
-      println("Step 4")
-      matrix_entries = hungarian_algorithm.step4(coordinate_matrix, rows, highest._1)
-      var sum = 0
+      var sum_row = 0
       for(r <- rows){
-        if(r == 1){
-          sum += 1
+        if(r){
+          sum_row += 1
         }
       }
-      sum_list += sum
-      println("Sum "+(i+1)+": "+sum)
-      rows = null
-      columns = null
-      coordinate_matrix = new CoordinateMatrix(sc.parallelize(matrix_entries))
-      val after = coordinate_matrix.entries.filter(entry => entry.i.toInt == highest._2._1 && entry.j.toInt == highest._2._2).first()
+      var sum_col = 0
+      for(c <- cols){
+        if(c){
+          sum_col += 1
+        }
+      }
+      assignments_left = rows.length-sum_row
+      columns_marked = sum_col
 
-      //Printing for test
-      print("Before: ")
-      println(before)
-      print("After: ")
-      println(after)
+      println("Assignments left: "+assignments_left)
+      println("Columns marked: "+columns_marked)
+
+      i+=1
     }
 
-    for((sum, i) <- sum_list.zipWithIndex){
-      println("Sum "+i+": "+sum)
+    println("Found assignments!")
+    val assignments = hungarian_algorithm.get_assignments(matrix_entries, columns_number, row_length, columns_number.length)
+    println("Adding assignments to single trajectories")
+    single_trajectories = single_trajectories.map(trajectory =>
+      (trajectory._1, addToTrajectory(trajectory._2, columns_name(assignments(trajectory._1))))
+    )
+    var index = 0
+    var moving = 0
+    for(trajectory <- single_trajectories){
+      if(trajectory._2.distinct.length != 1){
+        moving += 1
+      }
+      index += 1
     }
+    println("Index: "+index+" - Moving / index = "+(moving.toDouble/index.toDouble))
+  }
+
+  def addToTrajectory(listBuffer: ListBuffer[String], value: String): ListBuffer[String] = {
+    listBuffer += value
+    return listBuffer
   }
 }

@@ -1,9 +1,8 @@
 package single_trajectories
 
 import breeze.linalg.DenseMatrix
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 
-import scala.collection.mutable.{HashMap, ListBuffer, MultiMap, Set}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, MultiMap, Set}
 
 object cost_matrix {
 
@@ -20,8 +19,10 @@ object cost_matrix {
       dist_map += entry
       val coord_list = coord_map.addBinding(acell._2, acell._1)
       for((another, j) <- array.zipWithIndex){
-        if(acell._2.equals(another._2)){
-          dist_matrix(i,j) = 1.0
+        if(acell._1.equals(another._1)){
+          dist_matrix(i,j) = 2.0
+        } else if(acell._2.equals(another._2)){
+          dist_matrix(i,j) = 0.95
         }
       }
       /*
@@ -44,7 +45,7 @@ object cost_matrix {
         val i = dist_map(cell1)
         for(cell2 <- point2.get){
           val j = dist_map(cell2)
-          dist_matrix(i, j) = 1.0 - (connection._2._1/max_distance)
+          dist_matrix(i, j) = Math.max(0.9 - ((connection._2._1/max_distance)*0.9), 0.00001)
         }
       }
     }
@@ -68,35 +69,51 @@ object cost_matrix {
 
   //Input: Arrays for first and second timestep (position, count), distance matrix and distance map
   //Output: List of matrix entries, List of count on columns, and first iteration of the trajectory, represented as a list of a string-list.
-  def makeCoordinateMatrix(array1: Array[(String, Int)], array2: Array[(String, Int)], dist_matrix: DenseMatrix[Double], dist_map: HashMap[String, Int]): (ListBuffer[(MatrixEntry)], ListBuffer[Int], ListBuffer[ListBuffer[String]]) = {
-    var s = new ListBuffer[ListBuffer[String]]
-    var matrix_entries = new ListBuffer[MatrixEntry]
-    var columns_number = new ListBuffer[Int]
+  def makeCoordinateMatrix(array1: Array[(String, Int)], array2: Array[(String, Int)], dist_matrix: DenseMatrix[Double], dist_map: HashMap[String, Int]): (ListBuffer[(Matrix_entry)], ArrayBuffer[Int], ArrayBuffer[String], ListBuffer[(Int, ListBuffer[String])], Int) = {
+    var s = new ListBuffer[(Int, ListBuffer[String])]
+    var matrix_entries = new ListBuffer[Matrix_entry]
+    var columns_number = new ArrayBuffer[Int]
+    var columns_name = new ArrayBuffer[String]
 
     var index = 0
+    var col_sum = 0
     for ((element1, k) <- array1.zipWithIndex) {
-      var s_entry = new ListBuffer[String]
       for(i <- 0 until element1._2){
-        s_entry += element1._1
+        val s_entry = (index + i, new ListBuffer[String])
+        s_entry._2 += element1._1
+        s += s_entry
       }
       for((element2, j) <- array2.zipWithIndex) {
         if(k == 0){
           columns_number += element2._2
+          columns_name += element2._1
+          col_sum += element2._2
         }
         val distance = dist_matrix(dist_map(element1._1), dist_map(element2._1))
         if (distance > 0){
           for(i <- 0 until element1._2) {
-            index += 1
-            matrix_entries += new MatrixEntry(index, j, distance)
+            matrix_entries += new Matrix_entry(index + i, j, distance)
           }
-          index -= element1._2
         }
       }
       index += element1._2
-      s += s_entry
+    }
+    val extra = index - col_sum
+    println("Extra: "+extra+", index: "+index+", summed: "+(index-extra))
+    if(extra > 0){
+      index = 0
+      columns_number += extra
+      columns_name += "Out"
+      for(entries <- s){
+        for(entry <- entries._2){
+          matrix_entries += new Matrix_entry(index, columns_number.length - 1, 0.001)
+          index += 1
+        }
+      }
+      println("index2: "+index)
     }
 
-    return (matrix_entries, columns_number, s)
+    return (matrix_entries, columns_number, columns_name, s, index)
   }
 }
 

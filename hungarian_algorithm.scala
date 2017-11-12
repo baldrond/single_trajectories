@@ -1,10 +1,8 @@
 package single_trajectories
 
 import breeze.linalg.DenseVector
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix, MatrixEntry}
-import org.apache.spark.rdd.RDD
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 /**
   * Our approach for dealing with the hungarian algorithm on a aggregated dataset
@@ -14,82 +12,139 @@ object hungarian_algorithm {
 
   //Step 1 - Remove all 1's from rows
   //TODO: Test that this actually works
-  def step1(irow_matrix: IndexedRowMatrix): (Boolean, IndexedRowMatrix) = {
-    var edit = false
-    for(irow <- irow_matrix.rows){
-      val array = irow.vector.toArray
-      if(!(array contains 1.0)){
-        edit = true
-        val highest = irow.vector.argmax
-        println(irow.index+": "+highest)
-        irow.vector.foreachActive((index, value) => (index, value/irow.vector(highest)))
-      }
-    }
-
-    return (edit, irow_matrix)
-  }
-
-  //TODO: Step 2, the same as step 1 just for columns instead of rows
-
-  //Step 3 - Assign 1's
-  def step3(coordinate_matrix: CoordinateMatrix, matrix_entries: ListBuffer[MatrixEntry], columns_number: ListBuffer[Int]): (DenseVector[Int], DenseVector[Int]) = {
-    val columns = DenseVector.zeros[Int](coordinate_matrix.numCols().toInt)
-    val columns_counter = DenseVector.zeros[Int](coordinate_matrix.numCols().toInt)
-    val rows = DenseVector.zeros[Int](coordinate_matrix.numRows().toInt)
-
+  def step1(matrix_entries: ListBuffer[Matrix_entry], numRows: Int): ListBuffer[Matrix_entry] = {
+    val rows = DenseVector.zeros[Double](numRows)
     for(entry <- matrix_entries) {
-      if (entry.value == 1.0) {
-        if (columns_counter(entry.j.toInt) != columns_number(entry.j.toInt)) {
-          columns_counter(entry.j.toInt) += 1
-          rows(entry.i.toInt) = 1
+      if(rows(entry.i) != -1.0) {
+        if (entry.value == 1.0 || entry.value == 2.0) {
+          rows(entry.i) = -1.0
         } else {
-          columns(entry.j.toInt) = 1
+          if (rows(entry.i) != -1.0 && rows(entry.i) < entry.value) {
+            rows(entry.i) = entry.value
+          }
         }
       }
     }
+
     for(entry <- matrix_entries) {
-      if (entry.value == 1 && columns(entry.j.toInt) == 1 && rows(entry.j.toInt) == 1){
-        rows(entry.j.toInt) = 0
+      if(rows(entry.i) != -1.0){
+        entry.addToValue(1.0 - rows(entry.i))
+      }
+    }
+
+    return matrix_entries
+  }
+
+  def step2(matrix_entries: ListBuffer[Matrix_entry], numCols: Int): ListBuffer[Matrix_entry] = {
+    val cols = DenseVector.zeros[Double](numCols)
+    for(entry <- matrix_entries) {
+      if(cols(entry.j) != -1.0) {
+        if(entry.value == 1.0 || entry.value == 2.0) {
+          cols(entry.j) = -1.0
+        } else {
+          if(cols(entry.j) < entry.value) {
+            cols(entry.j) = entry.value
+          }
+        }
+      }
+    }
+
+    for(entry <- matrix_entries) {
+      if(cols(entry.j) != -1.0){
+        entry.addToValue(1.0 - cols(entry.j))
+      }
+    }
+
+    return matrix_entries
+  }
+
+  def step3(matrix_entries: ListBuffer[Matrix_entry], columns_number: ArrayBuffer
+    [Int], numRows: Int, numCols: Int): (DenseVector[Boolean], DenseVector[Boolean]) = {
+    val columns = DenseVector.zeros[Boolean](numCols)
+    val rows = DenseVector.zeros[Boolean](numRows)
+    val columns_counter = DenseVector.zeros[Int](numCols)
+    val rows_counter = Array.tabulate[ListBuffer[Matrix_entry]](numRows)(elem => new ListBuffer[Matrix_entry])
+    val one_entries = new ListBuffer[Matrix_entry]
+
+    for(entry <- matrix_entries){
+      if(entry.value == 1.0 || entry.value == 2.0){
+        rows_counter(entry.i) += entry
+        one_entries += entry
+      }
+    }
+    val rows_counter_sorted = rows_counter
+              .filter(list => list.nonEmpty)
+              .map(list => list.sortBy(entry => -entry.value))
+              .sortBy(list => list.length)
+
+    for(row <- rows_counter_sorted){
+      for(entry <- row){
+        if(rows(entry.i) || columns_counter(entry.j) != columns_number(entry.j)) {
+          columns_counter(entry.j) += 1
+          rows(entry.i) = true
+        }
+      }
+      if(!rows(row.head.i)){
+        for(entry <- row) {
+          columns(entry.j) = true
+        }
+      }
+    }
+    for(entry <- one_entries) {
+      if(columns(entry.j) && rows(entry.j)){
+        rows(entry.j) = false
       }
     }
 
     return (rows, columns)
   }
 
-  //Step 3 and 4, find highest value
-  def step3_4(irow_matrix: IndexedRowMatrix, rows: DenseVector[Int]): (Double, (Int, Int)) = {
-    var highest = (0.0, (0,0))
-
-    for(irow <- irow_matrix.rows.collect()){
-      if(rows(irow.index.toInt) == 0){
-        val array = irow.vector.toArray
-        for((elem, i) <- array.zipWithIndex) {
-          if (elem > highest._1 && elem != 1.0) {
-            highest = (elem, (irow.index.toInt, i))
-          }
+  def step4(matrix_entries: ListBuffer[Matrix_entry], rows: DenseVector[Boolean], columns: DenseVector[Boolean]): (ListBuffer[Matrix_entry]) = {
+    var highest = 0.0
+    for(entry <- matrix_entries){
+      if(entry.value != 1.0 && entry.value != 2.0 && !rows(entry.i) && !columns(entry.j)){
+        if (entry.value > highest){
+          highest = entry.value
         }
       }
     }
-    return highest
+
+    for(entry <- matrix_entries){
+      if(entry.value != 1.0 && entry.value != 2.0) {
+        if (!rows(entry.i) && !columns(entry.j)) {
+          entry.addToValue(1.0 - highest)
+        }
+      }
+      if (columns(entry.j) && rows(entry.i)) {
+        entry.addToValue(-(1.0 - highest))
+      }
+    }
+    return matrix_entries
   }
 
-  //Step 4, edit all elements not marked
-  //TODO: Must also edit double marked elements
-  def step4(coordinate_matrix: CoordinateMatrix, rows: DenseVector[Int], highest: Double): ListBuffer[MatrixEntry] = {
-    val entries = coordinate_matrix.entries.collect()
-    val new_entries = new ListBuffer[MatrixEntry]
-    for(entry <- entries){
-      var new_value = 0.0
-      if(rows(entry.i.toInt) == 0){
-        new_value = Math.min(1.0, entry.value + 1-highest)
-      } else {
-        new_value = entry.value
+  def get_assignments(matrix_entries: ListBuffer[Matrix_entry], columns_number: ArrayBuffer[Int], numRows: Int, numCols: Int): DenseVector[Int] = {
+    val rows = DenseVector.tabulate[Int](numRows)(row => -1)
+    val columns_counter = DenseVector.zeros[Int](numCols)
+    val rows_counter = Array.tabulate[ListBuffer[Matrix_entry]](numRows)(elem => new ListBuffer[Matrix_entry])
+
+    for(entry <- matrix_entries){
+      if(entry.value == 1.0 || entry.value == 2.0){
+        rows_counter(entry.i) += entry
       }
-      new_entries += new MatrixEntry(entry.i, entry.j, new_value)
     }
-    /*val new_entries = coordinate_matrix.entries.map(entry =>
-      MatrixEntry(entry.i, entry.j, if(rows(entry.i.toInt) == 0) Math.min(1.0,entry.value + 1-highest) else entry.value)
-    )*/
-    return new_entries
+    val rows_counter_sorted = rows_counter
+      .filter(list => list.nonEmpty)
+      .map(list => list.sortBy(entry => -entry.value))
+      .sortBy(list => list.length)
+
+    for(row <- rows_counter_sorted){
+      for(entry <- row){
+        if(rows(entry.i) != -1 || columns_counter(entry.j) != columns_number(entry.j)) {
+          columns_counter(entry.j) += 1
+          rows(entry.i) = entry.j
+        }
+      }
+    }
+    return rows
   }
 }
