@@ -25,18 +25,6 @@ object cost_matrix {
           dist_matrix(i,j) = 0.95
         }
       }
-      /*
-      for ((another, j) <- array.zipWithIndex){
-        println(i+", "+j)
-        val east = Math.abs(acell._2._1 - another._2._1)
-        val north = Math.abs(acell._2._2 - another._2._2)
-        val distance = Math.sqrt(Math.pow(east, 2) + Math.pow(north, 2))
-        if (distance > threshold) {
-          dist_matrix(i, j) = 0.0
-        } else {
-          dist_matrix(i, j) = 1.0 - (distance/threshold)
-        }
-      }*/
     }
     for(connection <- network){
       val point1 = coord_map.get(connection._1._1)

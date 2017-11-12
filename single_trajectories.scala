@@ -73,8 +73,8 @@ object single_trajectories {
     p = null
     p2 = null
     coordinate_matrix_retur = null
-    dist_matrix = null
-    dist_map = null
+    //dist_matrix = null
+    //dist_map = null
 
     println("Starting the hungarian algorithm")
     //Running through the hungarian algorithm
@@ -121,13 +121,22 @@ object single_trajectories {
     )
     var index = 0
     var moving = 0
+    var nearest = 0
     for(trajectory <- single_trajectories){
       if(trajectory._2.distinct.length != 1){
         moving += 1
+        val id1 = dist_map(trajectory._2(0))
+        val id2 = dist_map(trajectory._2(1))
+        val dist = dist_matrix(id1, id2)
+        if(dist == 0.95){
+          nearest += 1
+        }
       }
       index += 1
     }
-    println("Index: "+index+" - Moving / index = "+(moving.toDouble/index.toDouble))
+    println("Moving / Index = "+(moving.toDouble/index.toDouble))
+    println("Nearest / Index = "+(nearest.toDouble/index.toDouble))
+    println("Nearest / Moving = "+(nearest.toDouble/moving.toDouble))
   }
 
   def addToTrajectory(listBuffer: ListBuffer[String], value: String): ListBuffer[String] = {
