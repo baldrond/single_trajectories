@@ -14,6 +14,8 @@ object cost_matrix {
     val coord_map = new HashMap[(Double, Double), Set[String]] with MultiMap[(Double, Double), String]
     val threshold = 500.0
 
+    val test = new ListBuffer[String]
+
     for((acell, i) <- array.zipWithIndex){
       val entry = (acell._1, i)
       dist_map += entry
@@ -22,7 +24,7 @@ object cost_matrix {
         if(acell._1.equals(another._1)){
           dist_matrix(i,j) = 2.0
         } else if(acell._2.equals(another._2)){
-          dist_matrix(i,j) = 0.95
+          dist_matrix(i,j) = 1.0
         }
       }
     }
@@ -33,11 +35,10 @@ object cost_matrix {
         val i = dist_map(cell1)
         for(cell2 <- point2.get){
           val j = dist_map(cell2)
-          dist_matrix(i, j) = Math.max(0.9 - ((connection._2._1/max_distance)*0.9), 0.00001)
+          dist_matrix(i, j) = Math.max(1.0 - ((connection._2._1/max_distance)), 0.00001)
         }
       }
     }
-
 
     return (dist_matrix, dist_map)
   }
@@ -77,7 +78,7 @@ object cost_matrix {
           columns_name += element2._1
           col_sum += element2._2
         }
-        val distance = dist_matrix(dist_map(element1._1), dist_map(element2._1))
+        var distance = dist_matrix(dist_map(element1._1), dist_map(element2._1))
         if (distance > 0){
           for(i <- 0 until element1._2) {
             matrix_entries += new Matrix_entry(index + i, j, distance)
@@ -87,19 +88,16 @@ object cost_matrix {
       index += element1._2
     }
     val extra = index - col_sum
-    println("Extra: "+extra+", index: "+index+", summed: "+(index-extra))
-    if(extra > 0){
-      index = 0
-      columns_number += extra
-      columns_name += "Out"
-      for(entries <- s){
-        for(entry <- entries._2){
-          matrix_entries += new Matrix_entry(index, columns_number.length - 1, 0.001)
-          index += 1
-        }
+    index = 0
+    columns_number += 10000
+    columns_name += "Out"
+    for(entries <- s){
+      for(entry <- entries._2){
+        matrix_entries += new Matrix_entry(index, columns_number.length - 1, 0.000001)
+        index += 1
       }
-      println("index2: "+index)
     }
+    println("index2: "+index)
 
     return (matrix_entries, columns_number, columns_name, s, index)
   }
