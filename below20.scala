@@ -13,7 +13,7 @@ object below20 {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
-    val listings = sc.textFile("/Users/guro/Dokumenter/Skole/NTNU/Fordypningsprosjekt/Datasett/Stavanger_one_week.csv")
+    val listings = sc.textFile(paths.getPath()+"Stavanger_one_week.csv")
     val listingsRDD = listings.map( line => line.split(";"))
     val listingsValues = listingsRDD.mapPartitionsWithIndex { (idx, iter) => if (idx == 0) iter.drop(1) else iter }
 
@@ -39,7 +39,7 @@ object below20 {
 
 
 
-    val pw = new PrintWriter(new File("/Users/guro/Dokumenter/Skole/NTNU/Fordypningsprosjekt/Datasett/below20vector.csv"))
+    val pw = new PrintWriter(new File(paths.getPath()+"below20vector.csv"))
     for(line <- reduceMap.collect()){
       pw.write(line._1)
       for( elem <- line._2){

@@ -19,7 +19,18 @@ class Matrix_entry (var i: Int, var j: Int, var value: Double) extends Serializa
     value = 0.0
   }
 
+  def setValue(newValue: Double): Unit = {
+    value = newValue
+  }
+
   override def toString: String = {
     return "("+i+","+j+"): "+value
+  }
+
+  override def equals(obj: scala.Any): Boolean = {
+    if(obj.isInstanceOf[Matrix_entry]){
+      return obj.asInstanceOf[Matrix_entry].j == j && obj.asInstanceOf[Matrix_entry].i == this.i
+    }
+    return false
   }
 }

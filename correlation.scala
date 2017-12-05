@@ -1,7 +1,11 @@
 package single_trajectories
 
+import java.io.{File, PrintWriter}
+
 import breeze.linalg.DenseVector
 import org.apache.spark.{SparkConf, SparkContext}
+
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 object correlation {
 
@@ -10,37 +14,136 @@ object correlation {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
-    val rawFile = sc.textFile("/Users/guro/Dokumenter/Skole/NTNU/Fordypningsprosjekt/Datasett/below20vector.csv")
-    val rawRDD = rawFile.map(line => line.split(";"))
+    val rawFile = sc.textFile(paths.getPath()+"Stavanger_one_week.csv")
+    val rawFileRDD = rawFile.map( line => line.split(";"))
+    val rawFileValues = rawFileRDD.mapPartitionsWithIndex { (idx, iter) => if (idx == 0) iter.drop(1) else iter }
 
-    val idAndCount = rawRDD.map(row=> (row(0), getCounts(row))).collect()
+    val idInfo = rawFileValues.map(row => (row(1), row)).reduceByKey((a,b) => a).collect()
+    val idMap: HashMap[String, (String, String, String)] = HashMap()
+    for(id <- idInfo){
+      val map_entry = (id._1, (id._2(0), id._2(2), id._2(3)))
+      idMap += map_entry
+    }
 
+    val rawFile_B20 = sc.textFile(paths.getPath()+"below20vector.csv")
+    val rawRDD_B20 = rawFile_B20.map(line => line.split(";"))
 
-    val noZeroData = rawRDD.map(row=> (row(0), removeZeros(getCounts(row)))).collect()
+    val idAndCount = rawRDD_B20.map(row=> (row(0), getCounts(row))).collect()
 
-    val tenData = noZeroData.map(row=> (row._1, makeTenDenseVector(row._2))).filter(row => row._2 != null)
+    val noZeroData = rawRDD_B20.map(row=> (row(0), removeZeros(getCounts(row)))).collect()
 
+    val editableData = noZeroData.filter(row => containKtens(row._2, 1.0))
+    val newData: HashMap[String, DenseVector[Int]] = HashMap()
 
-    var cor = 0.0
-    var maxCor = 0.0
-    var id2 = ""
-    for (e<-tenData)
-    {
-      for(f<- noZeroData)
-      {
-        if(e._1 != f._1)
-        {
-          cor = correlation(e._2, f._2)
-
-          if(cor > maxCor)
-          {
-            id2 = f._1
-            maxCor = cor
+    var nr = 0
+    for(row <- editableData){
+      println(nr + " / "+editableData.length)
+      val allSubs = new ListBuffer[(Double, Double, DenseVector[Double])]
+      var totalCor = 0.0
+      for(row2 <- noZeroData){
+        if(row._1 != row2._1){
+          val (cor, diff) = correlation(row._2, row2._2)
+          if(!cor.isNaN){
+            val entry = (cor, diff, findSubs(row._2, row2._2))
+            allSubs += entry
+            totalCor += cor
           }
         }
       }
-      println("id1: " + e._1 + "  id2: " + id2 + " Max cor: " + maxCor)
-      maxCor = 0.0
+      val newVector = DenseVector.zeros[Double](row._2.length)
+      var i = 0
+      var unknownFirstValue = (false, false)
+      var ufvCount = 0
+      for(elem <- row._2){
+        if(elem != 0 && elem != 10){
+          newVector(i) = elem
+          if(unknownFirstValue._1){
+            unknownFirstValue = (true, true)
+          }
+        } else {
+          if(!unknownFirstValue._2 && unknownFirstValue._1){
+            ufvCount += 1
+          }
+          totalCor = 0.0
+          for (sub <- allSubs) {
+            if(sub._3(i) != 0.0 && sub._3(i-1) != 0.0) {
+              totalCor += sub._1
+            }
+          }
+          var change = 0.0
+          if(i > 0) {
+            for (sub <- allSubs) {
+              if(sub._3(i) != 0.0 && sub._3(i-1) != 0.0) {
+                val lastDiff = newVector(i-1) / sub._3(i-1)
+                newVector(i) += (sub._3(i) * lastDiff)  * (sub._1 / totalCor)
+              }
+            }
+          } else {
+            unknownFirstValue = (true, false)
+            ufvCount = 1
+          }
+          newVector(i) = Math.min(changeValue(newVector(i)), 20.0)
+        }
+        i += 1
+      }
+      if(unknownFirstValue._1 && unknownFirstValue._2){
+        for(i <- 0 until ufvCount+1){
+          totalCor = 0.0
+          for (sub <- allSubs) {
+            if(sub._3(ufvCount-i) != 0.0 && sub._3(ufvCount-i + 1) != 0.0) {
+              totalCor += sub._1
+            }
+          }
+          var change = 0.0
+          for (sub <- allSubs) {
+            if(sub._3(ufvCount-i) != 0.0 && sub._3(ufvCount-i + 1) != 0.0) {
+              val lastDiff = newVector(ufvCount-i+1) / sub._3(ufvCount-i+1)
+              newVector(ufvCount-i) += (sub._3(ufvCount-i) * lastDiff)  * (sub._1 / totalCor)
+            }
+          }
+          newVector(ufvCount-i) = Math.min(changeValue(newVector(ufvCount-i)), 20.0)
+        }
+      }
+      val map_entry = (row._1, newVector.map(value => value.toInt))
+      newData += map_entry
+      nr += 1
+    }
+
+    nr = 0
+    val pw = new PrintWriter(new File(paths.getPath()+"stavanger_one_week_edited.csv"))
+    for(data <- noZeroData){
+      println(nr+" / "+noZeroData.length)
+      if(newData.isDefinedAt(data._1)){
+        val newDataVector = newData(data._1)
+        val info = idMap(data._1)
+        var index = 0
+        for(value <- newDataVector){
+          pw.write(info._1+";"+data._1+";"+info._2+";"+info._3+";"+value+";"+getDateFromIndex(index) + "\n")
+          index += 1
+        }
+      } else {
+        val info = idMap(data._1)
+        var index = 0
+        for(value <- data._2){
+          pw.write(info._1+";"+data._1+";"+info._2+";"+info._3+";"+value+";"+getDateFromIndex(index) + "\n")
+          index += 1
+        }
+      }
+      nr += 1
+    }
+    pw.close
+  }
+
+
+  def changeValue(value: Double): Double = {
+    val round = Math.round(value)
+    val extra = value-round
+    if(extra > 0.05){
+      return Math.ceil(value)
+    } else if(extra < -0.05){
+      return Math.floor(value)
+    } else {
+      return round
     }
   }
 
@@ -59,42 +162,137 @@ object correlation {
     return denseVector
   }
 
-  def correlation(countList1: DenseVector[Int], countList2: DenseVector[Int] ) : (Double) =
+  def correlation(countList1: DenseVector[Int], countList2: DenseVector[Int] ) : (Double, Double) =
   {
-    var cor = 0.0
-    var x = 0.0
-    var sumx2 =0.0
-    var y = 0.0
-    var sumy2 =0.0
-    var xy = 0.0
+    var cor: Double = 0.0
+    var x: Double = 0.0
+    var sumx2: Double =0.0
+    var y: Double = 0.0
+    var sumy2: Double = 0.0
+    var xy: Double = 0.0
+    val usedValues = DenseVector.tabulate[Boolean](countList1.length)(id => true)
 
-    for(count <- countList1)
-    {
-      x+=count
-      sumx2 += Math.pow(count, 2)
+    var maxCount1 = 0
+    var maxCount2 = 0
+    var i = 0
+    for(count <- countList1){
+      if(count < 21){
+        usedValues(i) = false
+      }
+      if(count > maxCount1){
+        maxCount1 = count
+      }
+      i += 1
+    }
+    i = 0
+    for(count <- countList2){
+      if(count < 21){
+        usedValues(i) = false
+      }
+      if(count > maxCount2){
+        maxCount2 = count
+      }
+      i += 1
     }
 
-    var x2 = math.pow(x, 2)
-
-    for(count <- countList2)
-    {
-      y+=count
-      sumy2 += Math.pow(count, 2)
+    val rankList1 = DenseVector.zeros[Double](maxCount1-20)
+    if(maxCount2 < 20){
+      maxCount2 = 20
+    }
+    val rankList2 = DenseVector.zeros[Double](maxCount2-20)
+    i = 0
+    var length = 0
+    for(used <- usedValues) {
+      if (used) {
+        length += 1
+        rankList1(countList1(i)-21) += 1
+        rankList2(countList2(i)-21) += 1
+      }
+      i += 1
+    }
+    if(length < 1000){
+      return (-1, -1)
     }
 
-    var y2 = math.pow(y, 2)
-
-    for(i<-0 until countList1.length )
-    {
-      xy += countList1(i)*countList2(i)
+    i = 0
+    var sum = 0.0
+    for(rank <- rankList1){
+      val rank_value = rank
+      rankList1(i) = sum + rank_value / 2
+      sum += rank_value
+      i += 1
+    }
+    i = 0
+    sum = 0
+    for(rank <- rankList2){
+      val rank_value = rank
+      rankList2(i) = sum + rank_value / 2
+      sum += rank_value
+      i += 1
     }
 
-    val upper = (countList1.length * xy) - (x*y)
-    val under = math.sqrt(((countList1.length * sumx2) - x2) * ((countList1.length * sumy2) - y2))
-    cor = upper.toDouble/under.toDouble
+    i = 0
+    var difference = 0.0
+    for(used <- usedValues){
+      if(used){
+        length += 1
+        x += rankList1(countList1(i)-21)
+        sumx2 += Math.pow(rankList1(countList1(i)-21), 2)
+        y += rankList2(countList2(i)-21)
+        sumy2 += Math.pow(rankList2(countList2(i)-21), 2)
+        xy += rankList1(countList1(i)-21) * rankList2(countList2(i)-21)
+        difference += countList1(i) / countList2(i)
+      }
+      i += 1
+    }
 
-    return cor
+    val x2: Double = math.pow(x, 2)
+    val y2: Double = math.pow(y, 2)
 
+    val upper = (length * xy) - (x*y)
+    val under = math.sqrt(((length * sumx2) - x2) * ((length * sumy2) - y2))
+    cor = upper/under
+
+    val avg_difference = difference / length
+
+    return (cor, avg_difference)
+
+  }
+
+  def findSubs(countList1: DenseVector[Int], countList2: DenseVector[Int]) : (DenseVector[Double]) =
+  {
+    val usedValues = DenseVector.tabulate[Boolean](countList1.length)(id => true)
+    val subValues = DenseVector.zeros[Double](countList1.length)
+
+    var i = 0
+    for(count <- countList1){
+      if(count < 21){
+        usedValues(i) = false
+      }
+      i += 1
+    }
+
+    i = 0
+    for(used <- usedValues){
+      if(!used){
+        if(countList2(i) > 20){
+          subValues(i) = countList2(i)
+        }
+      } else {
+        if(i+1 < usedValues.length && !usedValues(i+1)){
+          if(countList2(i) > 20){
+            subValues(i) = countList2(i)
+          }
+        }
+        if(i > 0 && !usedValues(i-1)){
+          if(countList2(i) > 20){
+            subValues(i) = countList2(i)
+          }
+        }
+      }
+      i += 1
+    }
+    return subValues
   }
 
   def findTensAndZeroes(ids: String, countList: DenseVector[Int]) : (String) =
@@ -126,85 +324,18 @@ object correlation {
 
   def getDateFromIndex(index: Int) : (String) =
   {
-    // val index = (day - 25)*(60*24)+(min*60)+sec
-    var date = ""
-    var day = 0
-    var hour = 0
-    var min = 0
-
-    if(index/(60*24) < 1)
-    {
-      day = 25
-      if(index/60 < 0)
-      {
-        min = index
-      }
-      else
-      {
-        hour = index/60
-        min = index - hour*60
-      }
+    val day = Math.floor(index/(60*24)).toInt
+    val hour = Math.floor((index - day * (60*24))/60).toInt
+    val min = Math.floor(index - day * (60*24) - hour * 60).toInt
+    var hourString: String = ""+hour
+    if(hour < 10){
+      hourString = "0"+hour
     }
-    else if(index/(60*24) < 2)
-    {
-      day = 26
-      val newIndex = index - (day-25)*(60*24)
-      if(newIndex/60 < 0)
-      {
-        min = newIndex
-      }
-      else
-      {
-        hour = newIndex/60
-        min = newIndex - hour*60
-      }
+    var minString: String = ""+min
+    if(min < 10){
+      minString = "0"+min
     }
-    else if(index/(60*24) < 3)
-    {
-      day = 27
-      val newIndex = index - (day-25)*(60*24)
-      if(newIndex/60 < 0)
-      {
-        min = newIndex
-      }
-      else
-      {
-        hour = newIndex/60
-        min = newIndex - hour*60
-      }
-    }
-    else if(index/(60*24) < 4)
-    {
-      day = 28
-      val newIndex = index - (day-25)*(60*24)
-      if(newIndex/60 < 0)
-      {
-        min = newIndex
-      }
-      else
-      {
-        hour = newIndex/60
-        min = newIndex - hour*60
-      }
-    }
-    else
-    {
-      day = 29
-      val newIndex = index - (day-25)*(60*24)
-      if(newIndex/60 < 0)
-      {
-        min = newIndex
-      }
-      else
-      {
-        hour = newIndex/60
-        min = newIndex - hour*60
-      }
-    }
-
-    date = (day + " " + hour + ":" + min)
-
-    return date
+    return "2017-09-"+(25+day)+" "+hourString+":"+minString+":00"
   }
 
   def removeZeros(countList: DenseVector[Int]) : DenseVector[Int] =
@@ -323,6 +454,14 @@ object correlation {
     }
 
     return  tenDenseVector
+  }
+
+  def containKtens(countList: DenseVector[Int], k: Double): Boolean = {
+    val allTens = countList.findAll(count => count < 21)
+    if(allTens.isEmpty){
+      return false
+    }
+    return allTens.length < countList.length*k
   }
 
 }

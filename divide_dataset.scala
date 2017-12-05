@@ -13,10 +13,11 @@ object divide_dataset {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
-    val rawfile = sc.textFile(paths.getPath()+"Stavanger_one_week.csv")
-    val rawfileRDD = rawfile.filter(row => row.contains("2017-09-25 00:"))
+    val rawfile = sc.textFile(paths.getPath()+"Stavanger_one_week_edited.csv")
+    val rawfileRDD = rawfile.filter(row => row.contains("2017-09-25 01:"))
 
-    val pw = new PrintWriter(new File(paths.getPath()+"first_hour.csv"))
+
+    val pw = new PrintWriter(new File(paths.getPath()+"second_hour.csv"))
     for(line <- rawfileRDD.collect()){
       pw.write(line + "\n")
     }

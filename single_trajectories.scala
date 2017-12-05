@@ -1,6 +1,10 @@
 package single_trajectories
 
+import java.io.{BufferedWriter, File, FileWriter, PrintWriter}
+
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
+import uk.me.jstott.jcoord.UTMRef
 
 import scala.collection.mutable.ListBuffer
 
@@ -23,8 +27,11 @@ object single_trajectories {
   def main(args: Array[String]): Unit = {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")//.set("spark.driver.memory", "8g").set("spark.executor.memory", "8g")
     val sc = new SparkContext(conf)
+    val filename = paths.getPath()+"single_trajectories_0001_1.csv"
+    val pw = new BufferedWriter(new FileWriter(new File(filename)))
+    pw.close()
 
-    var rawfile = sc.textFile(paths.getPath()+"forsteTimen.csv")//.sample(false, 0.3)
+    var rawfile = sc.textFile(paths.getPath()+"second_hour.csv")
     var rawfileRDD = rawfile.map(line => line.split(";"))
     //0. Circle name
     //1. cell ID
@@ -35,11 +42,16 @@ object single_trajectories {
 
     //Map data from dataset
     var cell_with_coords = rawfileRDD.map(row => (row(1), (row(2).toDouble, row(3).toDouble))).distinct().collect()
-    var p = rawfileRDD.filter(row => row(5).equals("2017-09-25 00:49:00")).map(row => (row(1), if (row(4).contains("Below")) 10 else row(4).toInt)).collect()
-    var p2 = rawfileRDD.filter(row => row(5).equals("2017-09-25 00:50:00")).map(row => (row(1), if (row(4).contains("Below")) 10 else row(4).toInt)).collect()
+    val p_values = rawfileRDD.map(row => ((row(5), row(1)), if (row(4).contains("Below")) 10 else row(4).toInt)).reduceByKey((a,b) => a + b)
+                      .map(row => (row._1._1, addToList(new ListBuffer[(String, Int)], (row._1._2, row._2))))
+                      .reduceByKey((a,b) => a ++ b).sortByKey().map(row => row._2.toArray).collect()
+
     rawfile = null
     rawfileRDD = null
 
+    val print = true
+    val print_stats = true
+    val not_stats = false
 
     //Load in Network
     var rawfile_network = sc.textFile(paths.getPath()+"network.csv")
@@ -54,115 +66,195 @@ object single_trajectories {
     var dist_matrix_retur = cost_matrix.makeDistMatrix(cell_with_coords, network, max_distance)
     var dist_matrix = dist_matrix_retur._1
     var dist_map = dist_matrix_retur._2
+    val cell_map = dist_matrix_retur._3
     dist_matrix_retur = null
     network = null
     network_RDD = null
-
-    //val cost_matrix_size = cost_matrix.approxMatrixEntries(p, p2.length, dist_matrix)
-    //println("Creating cost matrix with approximatly density of "+cost_matrix_size._2+" / "+cost_matrix_size._1+" elements.")
-
-    //Create cost matrix
-    var coordinate_matrix_retur = cost_matrix.makeCoordinateMatrix(p, p2, dist_matrix, dist_map)
+    //Create cost matrixmatrix
+    var time = System.currentTimeMillis()
+    var coordinate_matrix_retur = cost_matrix.makeCoordinateMatrix(p_values(0), p_values(1), dist_matrix, dist_map, 0)
+    println(System.currentTimeMillis() - time)
     var single_trajectories = coordinate_matrix_retur._4
     var matrix_entries = coordinate_matrix_retur._1
     var columns_number = coordinate_matrix_retur._2
-    val columns_name = coordinate_matrix_retur._3
+    var columns_name = coordinate_matrix_retur._3
     var row_length = coordinate_matrix_retur._5
 
+    println(matrix_entries.length)
+    println(single_trajectories.length)
+    println(columns_number.length)
+    println(columns_name.length)
+    println(row_length)
+
     cell_with_coords = null
-    p = null
-    p2 = null
     coordinate_matrix_retur = null
-    //dist_matrix = null
-    //dist_map = null
-
-    println("Starting the hungarian algorithm")
-    //Running through the hungarian algorithm
-
-    //Must be tested properly
-    //matrix_entries = hungarian_algorithm.step1(matrix_entries, row_length)
-    //matrix_entries = hungarian_algorithm.step2(matrix_entries, columns_number.length)
-
-    //Do early assignments to ease up the problem
-    println("Early assignments")
-    var early_assignments_retur = hungarian_algorithm.early_assignments(matrix_entries, columns_number, row_length, columns_number.length)
-    var row_matrix = early_assignments_retur._1
-    columns_number = early_assignments_retur._2
-    var assignments = early_assignments_retur._3
-    early_assignments_retur = null
-    row_length = row_matrix.length
-    var best_assigning: ListBuffer[(Int, Int)] = null
-
-    //Repeat steps 3–4 until an assignment is possible (In this test: only a few iterations)
-    var assignments_left = 100000
-    var i = 0
-    while(assignments_left != 0) {
-      println("\nIteration "+(i+1))
-      best_assigning = new ListBuffer[(Int, Int)]
-      //Step 3
-      var (rows, cols, assigning) = hungarian_algorithm.step3(row_matrix, columns_number, row_length, columns_number.length)
-
-      var sum_row = 0
-      var k = 0
-      for(r <- rows){
-        if(r){
-          sum_row += 1
-          val entry = (row_matrix(k)._1, assigning(k))
-          best_assigning += entry
+    //val cost_matrix_size = cost_matrix.approxMatrixEntries(p, p2.length, dist_matrix)
+    //println("Creating cost matrix with approximatly density of "+cost_matrix_size._2+" / "+cost_matrix_size._1+" elements.")
+    try {
+      for (time_step <- 0 until 58) {
+        if (print_stats) {
+          println("Timestep " + time_step)
         }
-        k += 1
-      }
-      assigning = null
-      assignments_left = rows.length-sum_row
-      println("Assignments left: "+assignments_left)
+        if (time_step != 0) {
+          //Create cost matrix
+          time = System.currentTimeMillis()
+          var coordinate_matrix_retur2 = cost_matrix.makeCoordinateMatrix(p_values(time_step), p_values(time_step + 1), dist_matrix, dist_map, single_trajectories, time_step)
+          println("TIME: " + (System.currentTimeMillis() - time))
+          single_trajectories = coordinate_matrix_retur2._4
+          matrix_entries = coordinate_matrix_retur2._1
+          columns_number = coordinate_matrix_retur2._2
+          columns_name = coordinate_matrix_retur2._3
+          row_length = coordinate_matrix_retur2._5
+          var hall_of_fame = coordinate_matrix_retur2._6
+          coordinate_matrix_retur2 = null
 
-      //Step 4
-      if(rows.length > sum_row) {
-        row_matrix = hungarian_algorithm.step4(row_matrix, rows, cols)
+          println(matrix_entries.length)
+          println(single_trajectories.length)
+          println(columns_number.length)
+          println(columns_name.length)
+          println(row_length)
+
+          printList(hall_of_fame, filename)
+          hall_of_fame = null
+        }
+
+        if (print) {
+          println("Starting the hungarian algorithm")
+        }
+        //Running through the hungarian algorithm
+
+        //Must be tested properly
+        matrix_entries = hungarian_algorithm.step1(matrix_entries, row_length)
+        //matrix_entries = hungarian_algorithm.step2(matrix_entries, columns_number.length)
+
+        //Do early assignments to ease up the problem
+        if (print) {
+          println("Early assignments")
+        }
+        var early_assignments_retur = hungarian_algorithm.early_assignments(matrix_entries, columns_number, row_length, columns_number.length)
+        var row_matrix = early_assignments_retur._1
+        columns_number = early_assignments_retur._2
+        var assignments = early_assignments_retur._3
+        early_assignments_retur = null
+        row_length = row_matrix.length
+        var best_assigning: ListBuffer[(Int, Int)] = null
+
+        //Repeat steps 3–4 until an assignment is possible (In this test: only a few iterations)
+        var assignments_left = true
+        var i = 0
+        while (assignments_left) {
+          if (print) {
+            println("\nIteration " + (i + 1))
+          }
+          //Step 3
+          var (rows, cols, assigning) = hungarian_algorithm.step3(row_matrix, columns_number, row_length, columns_number.length, print)
+
+          if (assigning != null) {
+            best_assigning = new ListBuffer[(Int, Int)]
+            for ((row, k) <- row_matrix.zipWithIndex) {
+              val a = assigning.valueAt(k)
+              val entry = (row._1, a)
+              best_assigning += entry
+            }
+            assignments_left = false
+          } else {
+            //Step 4
+            row_matrix = hungarian_algorithm.step4(row_matrix, rows, cols)
+          }
+          rows = null
+          cols = null
+          i += 1
+        }
+        if (print) {
+          println("Found assignments!")
+        }
+        for (assignment <- best_assigning) {
+          assignments(assignment._1) = assignment._2
+        }
+
+        i = 0
+        for (a <- assignments) {
+          if (a == -1) {
+            println("ERROR ---> A: " + a + "; I: " + i)
+          }
+          i += 1
+        }
+
+        println("Adding assignments to single trajectories")
+        single_trajectories = single_trajectories.map(trajectory =>
+          (trajectory._1, addToTrajectory(trajectory._2, columns_name(assignments(trajectory._1))), trajectory._3)
+        )
+
+        matrix_entries = null
+        columns_number = null
+        columns_name = null
+        row_matrix = null
+        assignments = null
+        best_assigning = null
+
+        if ((print || print_stats) && !not_stats) {
+
+          var index = 0
+          var moving = 0
+          var nearest = 0
+          var out = 0
+          for (trajectory <- single_trajectories) {
+            //println(index)
+            if (trajectory._2.distinct.length != 1) {
+              val (north1, east1) = cell_map(trajectory._2(trajectory._2.length - 2))
+              val lnglat1 = new UTMRef(north1, east1, 'N', 33).toLatLng
+              moving += 1
+              if (trajectory._2.last.equals("Out")) {
+                out += 1
+              } else {
+                val (north2, east2) = cell_map(trajectory._2.last)
+                val lnglat2 = new UTMRef(north2, east2, 'N', 33).toLatLng
+                val id1 = dist_map(trajectory._2(trajectory._2.length - 2))
+                val id2 = dist_map(trajectory._2.last)
+                val dist = dist_matrix(id1, id2)
+                if (dist == 1.0) {
+                  nearest += 1
+                }
+              }
+            }
+            index += 1
+          }
+          println("Moving / Index = " + (moving.toDouble / index.toDouble))
+          println("Nearest / Index = " + (nearest.toDouble / index.toDouble))
+          println("Nearest / Moving = " + (nearest.toDouble / moving.toDouble))
+          println("Out / Moving = " + (out.toDouble / moving.toDouble) + "\n")
+        }
       }
-      rows = null
-      cols = null
-      i+=1
+    } catch {
+      case e: Exception =>
+        println(e)
+        printList(single_trajectories, filename)
+      System.exit(0)
     }
 
-    println("Found assignments!")
-    for(assignment <- best_assigning){
-      assignments(assignment._1) = assignment._2
-    }
+    // Finnished, print to file
+    printList(single_trajectories, filename)
 
-    i = 0
-    for(a <- assignments){
-      if(a == -1){
-        println("A: "+a+"; I: "+i)
-      }
-      i += 1
-    }
-    println("Adding assignments to single trajectories")
-    single_trajectories = single_trajectories.map(trajectory =>
-      (trajectory._1, addToTrajectory(trajectory._2, columns_name(assignments(trajectory._1))))
-    )
+  }
 
-    var index = 0
-    var moving = 0
-    var nearest = 0
+  def printList(single_trajectories: ListBuffer[(Int, ListBuffer[String], Int)], filename: String): Unit = {
+    val pw = new BufferedWriter(new FileWriter(new File(filename),true))
     for(trajectory <- single_trajectories){
-      if(trajectory._2.distinct.length != 1){
-        moving += 1
-        val id1 = dist_map(trajectory._2(0))
-        val id2 = dist_map(trajectory._2(1))
-        val dist = dist_matrix(id1, id2)
-        if(dist == 1.0){
-          nearest += 1
-        }
+      pw.write(trajectory._1+";"+trajectory._3+";")
+      for(pos <- trajectory._2){
+        pw.write(pos+";")
       }
-      index += 1
+      pw.write("\n")
     }
-    println("Moving / Index = "+(moving.toDouble/index.toDouble))
-    println("Nearest / Index = "+(nearest.toDouble/index.toDouble))
-    println("Nearest / Moving = "+(nearest.toDouble/moving.toDouble))
+    pw.close()
   }
 
   def addToTrajectory(listBuffer: ListBuffer[String], value: String): ListBuffer[String] = {
+    listBuffer += value
+    return listBuffer
+  }
+
+  def addToList(listBuffer: ListBuffer[(String, Int)], value: (String, Int)): ListBuffer[(String, Int)] = {
     listBuffer += value
     return listBuffer
   }

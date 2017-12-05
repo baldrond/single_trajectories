@@ -11,7 +11,6 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 object hungarian_algorithm {
 
-  //Step 1 - Remove all 1's from rows
   //TODO: Test that this actually works
   def step1(matrix_entries: ListBuffer[Matrix_entry], numRows: Int): ListBuffer[Matrix_entry] = {
     val rows = DenseVector.zeros[Double](numRows)
@@ -59,7 +58,7 @@ object hungarian_algorithm {
     }
 
     for(entry <- matrix_entries) {
-      if(cols(entry.j) != -1.0){
+      if(cols(entry.j) != -1.0 && entry.j != numCols - 1){
         entry.addToValue(cols(entry.j))
       }
     }
@@ -113,74 +112,90 @@ object hungarian_algorithm {
       i += 1
     }
 
-    println(new_numRows)
-
     return (new_matrix, columns_number, rows)
   }
 
-  def step3(row_matrix: Array[(Int, ListBuffer[Matrix_entry])], columns_number: ArrayBuffer[Int], numRows: Int, numCols: Int):
+  def step3(row_matrix: Array[(Int, ListBuffer[Matrix_entry])], columns_number: ArrayBuffer[Int], numRows: Int, numCols: Int, print: Boolean):
             (DenseVector[Boolean], DenseVector[Boolean], DenseVector[Int]) = {
 
-    val assignments = DenseVector.tabulate[Int](numRows)(row => -1)
     val rows = new DenseVector[Boolean](numRows)
     val cols = new DenseVector[Boolean](numCols)
     val verticals = DenseVector.zeros[Int](numCols)
-    val horisontals = DenseVector.zeros[Int](numRows)
+    var assignments = DenseVector.tabulate[Int](numRows)(row => -1)
+    val columns_number_copy = columns_number.clone()
+    val col_matrix = Array.tabulate[ListBuffer[(Int, Matrix_entry)]](numCols)(elem => new ListBuffer[(Int, Matrix_entry)])
 
-    val colrows = new ListBuffer[(Matrix_entry, Int)]
-
-
+    var row_num = 0
     for(row <- row_matrix){
       for(entry <- row._2){
         if(entry.value == 1.0 || entry.value == 2.0){
           verticals(entry.j) += 1
-        }
-      }
-    }
-    var row_num = 0
-    for(row <- row_matrix){
-      horisontals(row_num) = findHorisontalZeros(row_matrix, row_num)
-      for(entry <- row._2){
-        if(entry.value == 1.0 || entry.value == 2.0){
-          val vertical_value = verticals(entry.j).toDouble / columns_number(entry.j).toDouble
-          val buffer_entry = (mostColsOrRows(horisontals(row_num), vertical_value, entry), row_num)
-          colrows += buffer_entry
+          val col_entry = (row_num, entry)
+          col_matrix(entry.j) += col_entry
         }
       }
       row_num += 1
     }
-
-    for((entry, row_num) <- colrows) {
-      if(!(cols(entry.j) || rows(row_num))){
-        if (entry.value > 0.0) {
-          cols(entry.j) = true
-        } else if (entry.value < 0.0) {
-          rows(row_num) = true
-          assignments(row_num) = entry.j
+    row_num = 0
+    val empty_rows = new ListBuffer[Int]
+    for(row <- row_matrix) {
+      val row_entries = new ListBuffer[(Matrix_entry)]
+      for (entry <- row._2) {
+        if ((entry.value == 1.0 || entry.value == 2.0) && verticals(entry.j) != 0 && columns_number_copy(entry.j) != 0) {
+          var vertical_value = columns_number_copy(entry.j).toDouble / verticals(entry.j).toDouble
+          if(entry.j == numCols - 1){
+            vertical_value = 0
+          }
+          row_entries += new Matrix_entry(entry.i, entry.j, vertical_value)
+        }
+      }
+      if (row_entries.nonEmpty) {
+        val first_row_entry = row_entries.sortBy(entry => -Math.abs(entry.value)).head
+        rows(row_num) = true
+        if(columns_number_copy(first_row_entry.j) > 0) {
+          columns_number_copy(first_row_entry.j) -= 1
+        }
+        for (entry <- row._2) {
+          if(entry.value == 1.0 || entry.value == 2.0) {
+            verticals(first_row_entry.j) -= 1
+          }
+        }
+        assignments(row_num) = first_row_entry.j
+      } else {
+        empty_rows += row_num
+      }
+      row_num += 1
+    }
+    for(empty_row <- empty_rows){
+      for(row_entry <- row_matrix(empty_row)._2){
+        if (row_entry.value == 1.0 || row_entry.value == 2.0){
+          cols(row_entry.j) = true
         }
       }
     }
-    return (rows, cols, assignments)
-  }
-
-  def findHorisontalZeros(row_matrix: Array[(Int, ListBuffer[Matrix_entry])], row_num: Int): Int ={
-    var count = 0
-    for(entry <- row_matrix(row_num)._2){
-      if(entry.value == 1.0 || entry.value == 2.0){
-        count += 1
+    for((col, col_num) <- col_matrix.zipWithIndex) {
+      if(cols(col_num)){
+        for((row_num, entry) <- col){
+          rows(row_num) = false
+        }
       }
     }
-    return count
-  }
-
-  def mostColsOrRows(horisontal: Double, vertical: Double, selected_entry: Matrix_entry): Matrix_entry = {
-    var value = 0.0
-    if(vertical > horisontal){
-      value = vertical
-    } else {
-      value = -horisontal
+    var assign = true
+    var rows_missing = 0
+    for(row <- rows){
+      if(!row){
+        assign = false
+        rows_missing += 1
+      }
     }
-    return new Matrix_entry(selected_entry.i, selected_entry.j, value)
+    if(!assign){
+      assignments = null
+    }
+    if(print) {
+      println("Assignings left: " + empty_rows.length + " (" + rows_missing + ")")
+    }
+
+    return (rows, cols, assignments)
   }
 
   def step4(row_matrix: Array[(Int, ListBuffer[Matrix_entry])], rows: DenseVector[Boolean], columns: DenseVector[Boolean]): Array[(Int, ListBuffer[Matrix_entry])] = {
@@ -204,9 +219,6 @@ object hungarian_algorithm {
       }
       i += 1
     }
-
-    println("Highest: "+highest)
-    println("Next Highest: "+next_highest)
 
     i = 0
     for(row <- row_matrix){
