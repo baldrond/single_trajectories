@@ -32,7 +32,8 @@ object correlation {
 
     val noZeroData = rawRDD_B20.map(row=> (row(0), removeZeros(getCounts(row)))).collect()
 
-    val editableData = noZeroData.filter(row => containKtens(row._2, 1.0))
+    val editableData = noZeroData.filter(row => containKtens(row._2, 0.9))
+
     val newData: HashMap[String, DenseVector[Int]] = HashMap()
 
     var nr = 0
@@ -43,7 +44,7 @@ object correlation {
       for(row2 <- noZeroData){
         if(row._1 != row2._1){
           val (cor, diff) = correlation(row._2, row2._2)
-          if(!cor.isNaN){
+          if(cor > 0){
             val entry = (cor, diff, findSubs(row._2, row2._2))
             allSubs += entry
             totalCor += cor
@@ -55,7 +56,7 @@ object correlation {
       var unknownFirstValue = (false, false)
       var ufvCount = 0
       for(elem <- row._2){
-        if(elem != 0 && elem != 10){
+        if(elem != 10){
           newVector(i) = elem
           if(unknownFirstValue._1){
             unknownFirstValue = (true, true)
@@ -110,7 +111,7 @@ object correlation {
     }
 
     nr = 0
-    val pw = new PrintWriter(new File(paths.getPath()+"stavanger_one_week_edited.csv"))
+    val pw = new PrintWriter(new File(paths.getPath()+"stavanger_one_week_edited2.csv"))
     for(data <- noZeroData){
       println(nr+" / "+noZeroData.length)
       if(newData.isDefinedAt(data._1)){
@@ -118,14 +119,18 @@ object correlation {
         val info = idMap(data._1)
         var index = 0
         for(value <- newDataVector){
-          pw.write(info._1+";"+data._1+";"+info._2+";"+info._3+";"+value+";"+getDateFromIndex(index) + "\n")
+          if(value > 0) {
+            pw.write(info._1 + ";" + data._1 + ";" + info._2 + ";" + info._3 + ";" + value + ";" + getDateFromIndex(index) + "\n")
+          }
           index += 1
         }
       } else {
         val info = idMap(data._1)
         var index = 0
         for(value <- data._2){
-          pw.write(info._1+";"+data._1+";"+info._2+";"+info._3+";"+value+";"+getDateFromIndex(index) + "\n")
+          if(value > 0) {
+            pw.write(info._1 + ";" + data._1 + ";" + info._2 + ";" + info._3 + ";" + value + ";" + getDateFromIndex(index) + "\n")
+          }
           index += 1
         }
       }
@@ -463,5 +468,4 @@ object correlation {
     }
     return allTens.length < countList.length*k
   }
-
 }

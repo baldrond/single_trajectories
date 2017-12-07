@@ -25,13 +25,15 @@ object paths {
 
 object single_trajectories {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")//.set("spark.driver.memory", "8g").set("spark.executor.memory", "8g")
+    val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
+    //.set("spark.driver.memory", "8g").set("spark.executor.memory", "8g")
     val sc = new SparkContext(conf)
-    val filename = paths.getPath()+"single_trajectories_0001_1.csv"
+    val filename = paths.getPath() + "single_trajectories_0001_3.csv"
+    val daytime = true
     val pw = new BufferedWriter(new FileWriter(new File(filename)))
     pw.close()
 
-    var rawfile = sc.textFile(paths.getPath()+"second_hour.csv")
+    var rawfile = sc.textFile(paths.getPath() + "second_hour.csv")
     var rawfileRDD = rawfile.map(line => line.split(";"))
     //0. Circle name
     //1. cell ID
@@ -42,9 +44,9 @@ object single_trajectories {
 
     //Map data from dataset
     var cell_with_coords = rawfileRDD.map(row => (row(1), (row(2).toDouble, row(3).toDouble))).distinct().collect()
-    val p_values = rawfileRDD.map(row => ((row(5), row(1)), if (row(4).contains("Below")) 10 else row(4).toInt)).reduceByKey((a,b) => a + b)
-                      .map(row => (row._1._1, addToList(new ListBuffer[(String, Int)], (row._1._2, row._2))))
-                      .reduceByKey((a,b) => a ++ b).sortByKey().map(row => row._2.toArray).collect()
+    val p_values = rawfileRDD.map(row => ((row(5), row(1)), if (row(4).contains("Below")) 10 else row(4).toInt)).reduceByKey((a, b) => a + b)
+      .map(row => (row._1._1, addToList(new ListBuffer[(String, Int)], (row._1._2, row._2))))
+      .reduceByKey((a, b) => a ++ b).sortByKey().map(row => row._2.toArray).collect()
 
     rawfile = null
     rawfileRDD = null
@@ -54,10 +56,10 @@ object single_trajectories {
     val not_stats = false
 
     //Load in Network
-    var rawfile_network = sc.textFile(paths.getPath()+"network.csv")
+    var rawfile_network = sc.textFile(paths.getPath() + "network.csv")
     var rawfileRDD_network = rawfile_network.map(line => line.split(";"))
     var network_RDD = rawfileRDD_network.map(row => (((row(0).toDouble, row(1).toDouble), (row(2).toDouble, row(3).toDouble)), (row(4).toDouble, row(5).toDouble)))
-    val max_distance = network_RDD.map(row => ("max", row._2._1)).reduceByKey((a,b) => Math.max(a,b)).first()._2
+    val max_distance = network_RDD.map(row => ("max", row._2._1)).reduceByKey((a, b) => Math.max(a, b)).first()._2
     var network = network_RDD.collect()
     rawfile_network = null
     rawfileRDD_network = null
@@ -74,17 +76,28 @@ object single_trajectories {
     var time = System.currentTimeMillis()
     var coordinate_matrix_retur = cost_matrix.makeCoordinateMatrix(p_values(0), p_values(1), dist_matrix, dist_map, 0)
     println(System.currentTimeMillis() - time)
+    var ind = 0
+    for (pv <- p_values) {
+      var sum = 0
+      for (p <- pv) {
+        sum += p._2
+      }
+      println("SUM"+ind+": "+sum)
+      ind += 1
+    }
     var single_trajectories = coordinate_matrix_retur._4
     var matrix_entries = coordinate_matrix_retur._1
     var columns_number = coordinate_matrix_retur._2
     var columns_name = coordinate_matrix_retur._3
     var row_length = coordinate_matrix_retur._5
 
-    println(matrix_entries.length)
-    println(single_trajectories.length)
-    println(columns_number.length)
-    println(columns_name.length)
-    println(row_length)
+    if(print) {
+      println(matrix_entries.length)
+      println(single_trajectories.length)
+      println(columns_number.length)
+      println(columns_name.length)
+      println(row_length)
+    }
 
     cell_with_coords = null
     coordinate_matrix_retur = null
@@ -108,11 +121,13 @@ object single_trajectories {
           var hall_of_fame = coordinate_matrix_retur2._6
           coordinate_matrix_retur2 = null
 
-          println(matrix_entries.length)
-          println(single_trajectories.length)
-          println(columns_number.length)
-          println(columns_name.length)
-          println(row_length)
+          if(print) {
+            println(matrix_entries.length)
+            println(single_trajectories.length)
+            println(columns_number.length)
+            println(columns_name.length)
+            println(row_length)
+          }
 
           printList(hall_of_fame, filename)
           hall_of_fame = null
@@ -122,10 +137,6 @@ object single_trajectories {
           println("Starting the hungarian algorithm")
         }
         //Running through the hungarian algorithm
-
-        //Must be tested properly
-        matrix_entries = hungarian_algorithm.step1(matrix_entries, row_length)
-        //matrix_entries = hungarian_algorithm.step2(matrix_entries, columns_number.length)
 
         //Do early assignments to ease up the problem
         if (print) {
@@ -139,6 +150,8 @@ object single_trajectories {
         row_length = row_matrix.length
         var best_assigning: ListBuffer[(Int, Int)] = null
 
+        //Must be tested properly
+        row_matrix = hungarian_algorithm.step1(row_matrix)
         //Repeat steps 3–4 until an assignment is possible (In this test: only a few iterations)
         var assignments_left = true
         var i = 0
@@ -212,7 +225,7 @@ object single_trajectories {
                 val id1 = dist_map(trajectory._2(trajectory._2.length - 2))
                 val id2 = dist_map(trajectory._2.last)
                 val dist = dist_matrix(id1, id2)
-                if (dist == 1.0) {
+                if (dist == 0.95) {
                   nearest += 1
                 }
               }

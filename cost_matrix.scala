@@ -29,7 +29,7 @@ object cost_matrix {
         if(acell._1.equals(another._1)){
           dist_matrix(i,j) = 2.0
         } else if(acell._2.equals(another._2)){
-          dist_matrix(i,j) = 1.0
+          dist_matrix(i,j) = 0.95
         }
       }
     }
@@ -40,7 +40,7 @@ object cost_matrix {
         val i = dist_map(cell1)
         for(cell2 <- point2.get){
           val j = dist_map(cell2)
-          dist_matrix(i, j) = Math.max(1.0 - (connection._2._1/max_distance), 0.00001)
+          dist_matrix(i, j) = Math.max(0.9 - (connection._2._1/max_distance) * 0.9, 0.00001)
         }
       }
     }
@@ -91,12 +91,10 @@ object cost_matrix {
       }
       index += element1._2
     }
-    index = 0
-    columns_number += 10000
+    columns_number += matrix_entries.length
     columns_name += "Out"
     for(entries <- s){
-      matrix_entries += new Matrix_entry(index, columns_number.length - 1, 0.000001)
-      index += 1
+      matrix_entries += new Matrix_entry(entries._1, columns_number.length - 1, 0.000001)
     }
     return (matrix_entries, columns_number, columns_name, s, index)
   }
@@ -116,11 +114,16 @@ object cost_matrix {
       if(trajectory._2.last.equals("Out")){
         hall_of_fame += trajectory
       } else if(!trajectory._2.last.equals(last_id)){
+        val rows = s_t.drop(s_t.length - outcounter)
         for((element2, j) <- array2.zipWithIndex) {
-          val distance = dist_matrix(dist_map(last_id), dist_map(element2._1))
+          var distance = dist_matrix(dist_map(last_id), dist_map(element2._1))
           if (distance > 0) {
             for (i <- 0 until outcounter){
-              matrix_entries += new Matrix_entry(index + i, j, distance)
+              var new_distance = distance
+              if(distance == 2.0 && rows(i)._2.distinct.length != 1){
+                new_distance = 1.0
+              }
+              matrix_entries += new Matrix_entry(index + i, j, new_distance)
             }
           }
         }
@@ -146,11 +149,16 @@ object cost_matrix {
     println("hall of fame: "+hall_of_fame.length)
     println("S_T: "+s_t.length)
 
+    val rows = s_t.drop(s_t.length - outcounter)
     for((element2, j) <- array2.zipWithIndex) {
-      val distance = dist_matrix(dist_map(last_id), dist_map(element2._1))
+      var distance = dist_matrix(dist_map(last_id), dist_map(element2._1))
       if (distance > 0) {
         for (i <- 0 until outcounter){
-          matrix_entries += new Matrix_entry(index + i, j, distance)
+          var new_distance = distance
+          if(distance == 2.0 && rows(i)._2.distinct.length != 1){
+            new_distance = 1.0
+          }
+          matrix_entries += new Matrix_entry(index + i, j, new_distance)
         }
       }
     }

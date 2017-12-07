@@ -12,31 +12,30 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 object hungarian_algorithm {
 
   //TODO: Test that this actually works
-  def step1(matrix_entries: ListBuffer[Matrix_entry], numRows: Int): ListBuffer[Matrix_entry] = {
-    val rows = DenseVector.zeros[Double](numRows)
-    for(entry <- matrix_entries) {
-      if(rows(entry.i) != -1.0) {
+  def step1(row_matrix: Array[(Int, ListBuffer[Matrix_entry])]): Array[(Int, ListBuffer[Matrix_entry])] = {
+    for(row <- row_matrix) {
+      var highest = 0.0
+      for(entry <- row._2){
         if (entry.value == 1.0 || entry.value == 2.0) {
-          rows(entry.i) = -1.0
+          highest = 1.0
         } else {
           var effective_value = entry.value
           if(effective_value > 1){
             effective_value -= 1.0
           }
-          if(rows(entry.i) < effective_value) {
-            rows(entry.i) = effective_value
+          if(effective_value > highest){
+            highest = effective_value
           }
+        }
+      }
+      if(highest != 1.0 && highest > 0){
+        for(entry <- row._2) {
+          entry.addToValue(highest)
         }
       }
     }
 
-    for(entry <- matrix_entries) {
-      if(rows(entry.i) != -1.0){
-        entry.addToValue(rows(entry.i))
-      }
-    }
-
-    return matrix_entries
+    return row_matrix
   }
 
   def step2(matrix_entries: ListBuffer[Matrix_entry], numCols: Int): ListBuffer[Matrix_entry] = {
@@ -74,7 +73,7 @@ object hungarian_algorithm {
     val extra_two_entries = new ListBuffer[Matrix_entry]
 
     for(entry <- matrix_entries){
-      if(entry.value == 2.0){
+      if(entry.value == 2.0 || entry.value == 1.0){
         two_entries += entry
       } else {
         all_entries(entry.i) += entry
@@ -83,10 +82,9 @@ object hungarian_algorithm {
 
     val columns_number_original = columns_number.clone()
     var new_numRows = numRows
-    for(entry <- two_entries){
+    for(entry <- two_entries.sortBy(entry => -entry.value)){
       if(rows(entry.i) == -1) {
-        if (columns_number(entry.j) > columns_number_original(entry.j).toDouble*0.1
-        ) {
+        if (columns_number(entry.j) > columns_number_original(entry.j).toDouble*0.1) {
           rows(entry.i) = entry.j
           columns_number(entry.j) -= 1
           new_numRows -= 1
@@ -120,16 +118,17 @@ object hungarian_algorithm {
 
     val rows = new DenseVector[Boolean](numRows)
     val cols = new DenseVector[Boolean](numCols)
-    val verticals = DenseVector.zeros[Int](numCols)
+    val verticals = DenseVector.zeros[Double](numCols)
     var assignments = DenseVector.tabulate[Int](numRows)(row => -1)
     val columns_number_copy = columns_number.clone()
     val col_matrix = Array.tabulate[ListBuffer[(Int, Matrix_entry)]](numCols)(elem => new ListBuffer[(Int, Matrix_entry)])
 
     var row_num = 0
     for(row <- row_matrix){
+      val sum1 = row._2.count(entry => entry.value == 1.0 || entry.value == 2.0)
       for(entry <- row._2){
         if(entry.value == 1.0 || entry.value == 2.0){
-          verticals(entry.j) += 1
+          verticals(entry.j) += 1.0 / sum1.toDouble
           val col_entry = (row_num, entry)
           col_matrix(entry.j) += col_entry
         }
@@ -142,7 +141,7 @@ object hungarian_algorithm {
       val row_entries = new ListBuffer[(Matrix_entry)]
       for (entry <- row._2) {
         if ((entry.value == 1.0 || entry.value == 2.0) && verticals(entry.j) != 0 && columns_number_copy(entry.j) != 0) {
-          var vertical_value = columns_number_copy(entry.j).toDouble / verticals(entry.j).toDouble
+          var vertical_value = columns_number_copy(entry.j).toDouble / verticals(entry.j)
           if(entry.j == numCols - 1){
             vertical_value = 0
           }
@@ -155,9 +154,10 @@ object hungarian_algorithm {
         if(columns_number_copy(first_row_entry.j) > 0) {
           columns_number_copy(first_row_entry.j) -= 1
         }
+        val sum1 = row._2.count(entry => entry.value == 1.0 || entry.value == 2.0)
         for (entry <- row._2) {
           if(entry.value == 1.0 || entry.value == 2.0) {
-            verticals(first_row_entry.j) -= 1
+            verticals(first_row_entry.j) -= 1 / sum1
           }
         }
         assignments(row_num) = first_row_entry.j
