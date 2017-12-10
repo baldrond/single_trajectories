@@ -28,7 +28,7 @@ object single_trajectories {
     val conf = new SparkConf().setAppName("Stavanger").setMaster("local[*]")
     //.set("spark.driver.memory", "8g").set("spark.executor.memory", "8g")
     val sc = new SparkContext(conf)
-    val filename = paths.getPath() + "single_trajectories_0001_3.csv"
+    val filename = paths.getPath() + "single_trajectories_0001_5.csv"
     val daytime = true
     val pw = new BufferedWriter(new FileWriter(new File(filename)))
     pw.close()
@@ -111,7 +111,7 @@ object single_trajectories {
         if (time_step != 0) {
           //Create cost matrix
           time = System.currentTimeMillis()
-          var coordinate_matrix_retur2 = cost_matrix.makeCoordinateMatrix(p_values(time_step), p_values(time_step + 1), dist_matrix, dist_map, single_trajectories, time_step)
+          var coordinate_matrix_retur2 = cost_matrix.makeCoordinateMatrix(p_values(time_step), p_values(time_step + 1), dist_matrix, dist_map, single_trajectories, time_step, daytime, cell_map, max_distance)
           println("TIME: " + (System.currentTimeMillis() - time))
           single_trajectories = coordinate_matrix_retur2._4
           matrix_entries = coordinate_matrix_retur2._1

@@ -3,6 +3,7 @@ package single_trajectories
 import java.util
 
 import breeze.linalg.DenseMatrix
+import uk.me.jstott.jcoord.UTMRef
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, MultiMap, Set}
@@ -16,8 +17,6 @@ object cost_matrix {
     var dist_map: HashMap[String, Int] = HashMap()
     var cell_map: HashMap[String, (Double, Double)] = new HashMap()
     val coord_map = new HashMap[(Double, Double), Set[String]] with MultiMap[(Double, Double), String]
-    val threshold = 500.0
-
     val test = new ListBuffer[String]
 
     for((acell, i) <- array.zipWithIndex){
@@ -99,7 +98,7 @@ object cost_matrix {
     return (matrix_entries, columns_number, columns_name, s, index)
   }
 
-  def makeCoordinateMatrix(array1: Array[(String, Int)], array2: Array[(String, Int)], dist_matrix: DenseMatrix[Double], dist_map: HashMap[String, Int], l_t: ListBuffer[(Int, ListBuffer[String], Int)], iteration: Int):
+  def makeCoordinateMatrix(array1: Array[(String, Int)], array2: Array[(String, Int)], dist_matrix: DenseMatrix[Double], dist_map: HashMap[String, Int], l_t: ListBuffer[(Int, ListBuffer[String], Int)], iteration: Int, day_trajectories: Boolean, cell_map: HashMap[String, (Double, Double)], max_distance: Double):
           (ListBuffer[(Matrix_entry)], ArrayBuffer[Int], ArrayBuffer[String], ListBuffer[(Int, ListBuffer[String], Int)], Int, ListBuffer[(Int, ListBuffer[String], Int)]) = {
     var matrix_entries = new ListBuffer[Matrix_entry]
     var columns_number = new ArrayBuffer[Int]
@@ -122,6 +121,23 @@ object cost_matrix {
               var new_distance = distance
               if(distance == 2.0 && rows(i)._2.distinct.length != 1){
                 new_distance = 1.0
+              }
+              if(day_trajectories) {
+                val last_two = rows(i)._2.drop(rows(i)._2.length - 2)
+                if (last_two.distinct.length != 1) {
+                  val first = cell_map(last_two.head)
+                  val last = cell_map(last_two.last)
+                  val next = cell_map(element2._1)
+                  val first_lnglat = new UTMRef(first._1, first._2, 'N', 33).toLatLng
+                  val last_lnglat = new UTMRef(last._1, last._2, 'N', 33).toLatLng
+                  val next_lnglat = new UTMRef(next._1, next._2, 'N', 33).toLatLng
+                  val first_point = new Point(first_lnglat.getLat, first_lnglat.getLng)
+                  val last_point = new Point(last_lnglat.getLat, last_lnglat.getLng)
+                  val next_point = new Point(next_lnglat.getLat, next_lnglat.getLng)
+                  val fictional_point = new Point(first_lnglat.getLat + (last_lnglat.getLat - first_lnglat.getLat), first_lnglat.getLng + (last_lnglat.getLng - first_lnglat.getLng))
+                  val actual_distance = new Edge(fictional_point, next_point).distBetween()
+                  new_distance = Math.max(0.9 - (actual_distance/max_distance) * 0.9, 0.00001)
+                }
               }
               matrix_entries += new Matrix_entry(index + i, j, new_distance)
             }

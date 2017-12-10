@@ -41,6 +41,7 @@ object correlation {
       println(nr + " / "+editableData.length)
       val allSubs = new ListBuffer[(Double, Double, DenseVector[Double])]
       var totalCor = 0.0
+      var highest = (0.0, new DenseVector[Int](0))
       for(row2 <- noZeroData){
         if(row._1 != row2._1){
           val (cor, diff) = correlation(row._2, row2._2)
@@ -48,6 +49,9 @@ object correlation {
             val entry = (cor, diff, findSubs(row._2, row2._2))
             allSubs += entry
             totalCor += cor
+            if(cor > highest._1){
+              highest = (cor, row2._2)
+            }
           }
         }
       }
@@ -108,6 +112,18 @@ object correlation {
       val map_entry = (row._1, newVector.map(value => value.toInt))
       newData += map_entry
       nr += 1
+      for(r <- row._2) {
+        print(r + ";")
+      }
+      println()
+      for(r <- map_entry._2){
+        print(r + ";")
+      }
+      println()
+      for(r <- highest._2){
+        print(r + ";")
+      }
+      println()
     }
 
     nr = 0

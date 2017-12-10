@@ -73,7 +73,7 @@ object hungarian_algorithm {
     val extra_two_entries = new ListBuffer[Matrix_entry]
 
     for(entry <- matrix_entries){
-      if(entry.value == 2.0 || entry.value == 1.0){
+      if(entry.j != columns_number.length-1){
         two_entries += entry
       } else {
         all_entries(entry.i) += entry
